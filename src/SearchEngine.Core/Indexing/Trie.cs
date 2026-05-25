@@ -39,6 +39,11 @@ public sealed class Trie
         }
     }
 
+    public IReadOnlyCollection<string> AllWords()
+    {
+        lock (_gate) { return _frequencies.Keys.ToArray(); }
+    }
+
     public IReadOnlyList<string> Autocomplete(string prefix)
     {
         if (string.IsNullOrEmpty(prefix)) return Array.Empty<string>();
