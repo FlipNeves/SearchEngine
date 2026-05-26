@@ -3,8 +3,6 @@ using System.Threading.Channels;
 using AngleSharp;
 using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using SearchEngine.Core.Abstractions;
@@ -95,7 +93,6 @@ public sealed class WebCrawlerWorker : BackgroundService
             return;
         }
 
-        // Evita baixar imagens, PDFs etc. — só HTML interessa para indexação textual.
         var mediaType = response.Content.Headers.ContentType?.MediaType;
         if (!string.Equals(mediaType, "text/html", StringComparison.OrdinalIgnoreCase))
             return;
@@ -133,7 +130,6 @@ public sealed class WebCrawlerWorker : BackgroundService
 
     private ValueTask TryEnqueueAsync(string url, CancellationToken ct)
     {
-        // TryAdd retorna false se a URL já foi vista — ganho duplo: dedup e atomicidade.
         if (!_visited.TryAdd(url, 0)) return ValueTask.CompletedTask;
 
         if (!_channel.Writer.TryWrite(url))
@@ -152,14 +148,12 @@ public sealed class WebCrawlerWorker : BackgroundService
         if (resolved.Scheme != Uri.UriSchemeHttp && resolved.Scheme != Uri.UriSchemeHttps)
             return false;
 
-        // Remove fragmento (#section) e querystring para deduplicar páginas equivalentes.
         absolute = resolved.GetLeftPart(UriPartial.Path);
         return true;
     }
 
     private static string ExtractCleanText(IDocument document)
     {
-        // document.Body.TextContent inclui script/style; removemos antes para não poluir o índice.
         foreach (var node in document.QuerySelectorAll("script, style, noscript"))
             node.Remove();
 
