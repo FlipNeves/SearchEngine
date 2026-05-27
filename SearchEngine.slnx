@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/Shared/">
+    <Project Path="src/Shared/SearchEngine.Shared/SearchEngine.Shared.csproj" />
+    <Project Path="src/Shared/SearchEngine.Shared.Persistence/SearchEngine.Shared.Persistence.csproj" />
+    <Project Path="src/Shared/SearchEngine.Crawler/SearchEngine.Crawler.csproj" />
+  </Folder>
+  <Folder Name="/01-FromScratch/">
+    <Project Path="src/01-FromScratch/SearchEngine.FromScratch.Core/SearchEngine.FromScratch.Core.csproj" />
+    <Project Path="src/01-FromScratch/SearchEngine.FromScratch.Infrastructure/SearchEngine.FromScratch.Infrastructure.csproj" />
+    <Project Path="src/01-FromScratch/SearchEngine.FromScratch.Api/SearchEngine.FromScratch.Api.csproj" />
+  </Folder>
+  <Folder Name="/02-AtlasSearch/" />
+</Solution>
