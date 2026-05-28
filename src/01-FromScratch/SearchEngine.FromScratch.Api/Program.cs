@@ -17,6 +17,7 @@ builder.Services.Configure<Bm25Options>(builder.Configuration.GetSection("Bm25")
 
 builder.Services.AddSharedMongo();
 builder.Services.AddScoped<IInvertedIndexDao, InvertedIndexDao>();
+builder.Services.AddScoped<IPhraseIndexDao, PhraseIndexDao>();
 builder.Services.AddScoped<IIndexStatsDao, IndexStatsDao>();
 builder.Services.AddScoped<ISearchEngine, FromScratchSearchEngine>();
 builder.Services.AddSingleton<Bm25Scorer>(sp =>
