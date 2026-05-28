@@ -1,0 +1,95 @@
+@inject ISearchApi Api
+@implements IDisposable
+
+<div class="search-bar">
+    <input type="text"
+           value="@text"
+           @oninput="OnInput"
+           @onkeydown="OnKeyDown"
+           placeholder="Pesquisar…"
+           autocomplete="off" />
+
+    @if (showSuggestions && suggestions.Count > 0)
+    {
+        <ul class="autocomplete">
+            @foreach (var s in suggestions)
+            {
+                <li @onclick="() => PickSuggestion(s)">@s</li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    [Parameter] public EventCallback<string> OnSearch { get; set; }
+
+    string text = "";
+    IReadOnlyList<string> suggestions = Array.Empty<string>();
+    bool showSuggestions;
+    CancellationTokenSource _debounceCts = new();
+
+    async Task OnInput(ChangeEventArgs e)
+    {
+        text = e.Value?.ToString() ?? "";
+
+        _debounceCts.Cancel();
+        _debounceCts.Dispose();
+        _debounceCts = new CancellationTokenSource();
+        var token = _debounceCts.Token;
+
+        try
+        {
+            await Task.Delay(200, token);
+
+            var prefix = LastWord(text);
+            if (prefix.Length < 2)
+            {
+                suggestions = Array.Empty<string>();
+                showSuggestions = false;
+                StateHasChanged();
+                return;
+            }
+
+            suggestions = await Api.AutocompleteAsync(prefix, 10, token);
+            showSuggestions = suggestions.Count > 0;
+            StateHasChanged();
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    static string LastWord(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        var lastSpace = s.LastIndexOf(' ');
+        return lastSpace < 0 ? s : s[(lastSpace + 1)..];
+    }
+
+    static string ReplaceLastWord(string s, string replacement)
+    {
+        var lastSpace = s.LastIndexOf(' ');
+        return lastSpace < 0 ? replacement : s[..(lastSpace + 1)] + replacement;
+    }
+
+    async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _debounceCts.Cancel();
+            showSuggestions = false;
+            await OnSearch.InvokeAsync(text);
+        }
+    }
+
+    async Task PickSuggestion(string s)
+    {
+        text = ReplaceLastWord(text, s);
+        showSuggestions = false;
+        await OnSearch.InvokeAsync(text);
+    }
+
+    public void Dispose()
+    {
+        _debounceCts.Cancel();
+        _debounceCts.Dispose();
+    }
+}

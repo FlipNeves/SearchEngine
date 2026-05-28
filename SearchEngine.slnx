@@ -3,6 +3,7 @@
     <Project Path="src/Shared/SearchEngine.Shared/SearchEngine.Shared.csproj" />
     <Project Path="src/Shared/SearchEngine.Shared.Persistence/SearchEngine.Shared.Persistence.csproj" />
     <Project Path="src/Shared/SearchEngine.Crawler/SearchEngine.Crawler.csproj" />
+    <Project Path="src/Shared/SearchEngine.Ui/SearchEngine.Ui.csproj" />
   </Folder>
   <Folder Name="/01-FromScratch/">
     <Project Path="src/01-FromScratch/SearchEngine.FromScratch.Core/SearchEngine.FromScratch.Core.csproj" />

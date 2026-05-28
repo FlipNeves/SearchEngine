@@ -1,0 +1,25 @@
+<div class="results">
+    @if (Hits.Count == 0)
+    {
+        <p>Nenhum resultado.</p>
+    }
+    else
+    {
+        @foreach (var hit in Hits)
+        {
+            <article class="result">
+                <a href="@hit.Url" target="_blank" rel="noopener">
+                    <small class="result-url">@hit.Url</small>
+                    <h3 class="result-title">@hit.Title</h3>
+                </a>
+                <p class="result-preview">@hit.Preview</p>
+                <small class="result-score">score: @hit.Score.ToString("F2")</small>
+            </article>
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<SearchHit> Hits { get; set; } = Array.Empty<SearchHit>();
+}

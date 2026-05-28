@@ -1,0 +1,40 @@
+@page "/"
+@inject ISearchApi Api
+
+<PageTitle>SearchEngine</PageTitle>
+
+<div class="search-page">
+    <h1 class="logo">SearchEngine</h1>
+
+    <SearchBar OnSearch="HandleSearch" />
+
+    @if (loading)
+    {
+        <p aria-busy="true">Buscando…</p>
+    }
+    else if (response is not null)
+    {
+        <DidYouMeanBanner Suggestion="response.DidYouMean" OnClick="HandleSearch" />
+        <ResultsList Hits="response.Results" />
+    }
+</div>
+
+@code {
+    SearchResponseDto? response;
+    bool loading;
+
+    async Task HandleSearch(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return;
+        loading = true;
+        StateHasChanged();
+        try
+        {
+            response = await Api.SearchAsync(query, 20, default);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

@@ -25,6 +25,12 @@ builder.Services.AddSingleton<Bm25Scorer>(sp =>
 builder.Services.AddSingleton<TrieIndex>();
 builder.Services.AddHostedService<TrieRefreshService>();
 
+const string UiCorsPolicy = "ui";
+builder.Services.AddCors(opts => opts.AddPolicy(UiCorsPolicy, p => p
+    .WithOrigins("http://localhost:5003")
+    .AllowAnyHeader()
+    .AllowAnyMethod()));
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -37,6 +43,8 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+
+app.UseCors(UiCorsPolicy);
 
 app.UseSwagger();
 app.UseSwaggerUI(c =>

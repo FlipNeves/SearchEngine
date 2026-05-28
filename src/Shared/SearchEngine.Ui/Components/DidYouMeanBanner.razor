@@ -1,0 +1,14 @@
+@if (Suggestion is not null)
+{
+    <div class="did-you-mean">
+        Você quis dizer:
+        <a href="#" @onclick="HandleClick" @onclick:preventDefault>@Suggestion.Corrected</a>?
+    </div>
+}
+
+@code {
+    [Parameter] public DidYouMean? Suggestion { get; set; }
+    [Parameter] public EventCallback<string> OnClick { get; set; }
+
+    Task HandleClick() => OnClick.InvokeAsync(Suggestion!.Corrected);
+}

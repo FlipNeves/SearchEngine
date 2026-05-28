@@ -1,0 +1,139 @@
+:root {
+    --se-fg-strong: #f1f3f4;
+    --se-fg: #dadce0;
+    --se-muted: #9aa0a6;
+    --se-link: #8ab4f8;
+    --se-url: #81c995;
+    --se-warn: #f28b82;
+    --se-border: #5f6368;
+    --se-surface: #2d2e30;
+    --se-surface-hover: #3c4043;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--se-fg);
+    font-weight: 400;
+    letter-spacing: 0.005em;
+}
+
+main.container {
+    max-width: 720px;
+}
+
+.search-page {
+    padding-top: 2rem;
+}
+
+.logo {
+    text-align: center;
+    font-size: 3.5rem;
+    font-weight: 500;
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+    color: var(--se-fg-strong);
+    letter-spacing: -0.01em;
+}
+
+.search-bar {
+    position: relative;
+    margin-bottom: 1.5rem;
+}
+
+.search-bar input {
+    border-radius: 24px !important;
+    padding: 0.75rem 1.25rem;
+    border: 1px solid var(--se-border);
+    background: var(--se-surface);
+    color: var(--se-fg-strong);
+    width: 100%;
+    margin-bottom: 0;
+    font-size: 1rem;
+}
+
+.search-bar input:hover,
+.search-bar input:focus {
+    border-color: var(--se-link);
+    box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.15);
+}
+
+.autocomplete {
+    list-style: none;
+    padding: 0.5rem 0;
+    margin: 0.25rem 0 0 0;
+    background: var(--se-surface);
+    border: 1px solid var(--se-border);
+    border-radius: 16px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 10;
+}
+
+.autocomplete li {
+    padding: 0.5rem 1.25rem;
+    cursor: pointer;
+    color: var(--se-fg);
+}
+
+.autocomplete li:hover {
+    background: var(--se-surface-hover);
+    color: var(--se-fg-strong);
+}
+
+.did-you-mean {
+    margin: 1rem 0;
+    font-style: italic;
+    color: var(--se-warn);
+    font-weight: 500;
+}
+
+.did-you-mean a {
+    color: var(--se-warn);
+    text-decoration: underline;
+}
+
+.results {
+    margin-top: 1.5rem;
+}
+
+.result {
+    margin-bottom: 1.5rem;
+    padding: 0;
+    border: none;
+    background: none;
+}
+
+.result a {
+    text-decoration: none;
+}
+
+.result-url {
+    color: var(--se-url);
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.result-title {
+    margin: 0.1rem 0 0.2rem 0;
+    font-size: 1.2rem;
+    font-weight: 500;
+    color: var(--se-link);
+}
+
+.result a:hover .result-title {
+    text-decoration: underline;
+}
+
+.result-preview {
+    margin: 0.25rem 0;
+    color: var(--se-fg);
+    line-height: 1.55;
+}
+
+.result-score {
+    color: var(--se-muted);
+    font-size: 0.75rem;
+}

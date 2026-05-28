@@ -103,5 +103,3 @@ public static class SearchEndpoints
         return i;
     }
 }
-
-public sealed record SuggestionResultDto(string Word, int Distance, int Score);
