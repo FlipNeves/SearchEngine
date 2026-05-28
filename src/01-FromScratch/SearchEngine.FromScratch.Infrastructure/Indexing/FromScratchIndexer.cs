@@ -10,20 +10,30 @@ namespace SearchEngine.FromScratch.Infrastructure.Indexing;
 public sealed class FromScratchIndexer : IPageIndexer
 {
     private readonly IInvertedIndexDao _index;
+    private readonly IPagesRepository _pages;
+    private readonly IIndexStatsDao _stats;
 
-    public FromScratchIndexer(IInvertedIndexDao index) => _index = index;
-
-    public Task IndexAsync(WebPage page, CancellationToken ct = default)
+    public FromScratchIndexer(IInvertedIndexDao index, IPagesRepository pages, IIndexStatsDao stats)
     {
-        if (!ObjectId.TryParse(page.Id, out var pageOid)) return Task.CompletedTask;
+        _index = index;
+        _pages = pages;
+        _stats = stats;
+    }
+
+    public async Task IndexAsync(WebPage page, CancellationToken ct = default)
+    {
+        if (!ObjectId.TryParse(page.Id, out var pageOid)) return;
 
         var byTerm = new Dictionary<string, PostingDataModel>(StringComparer.Ordinal);
+        var lengthTitle = 0;
+        var lengthContent = 0;
 
         foreach (var token in Tokenizer.Tokenize(page.Title))
         {
             var posting = GetOrCreate(byTerm, token.Value, pageOid);
             posting.TfTitle++;
             posting.PositionsTitle.Add(new PositionDataModel { Start = token.Start, End = token.End });
+            lengthTitle++;
         }
 
         foreach (var token in Tokenizer.Tokenize(page.Content))
@@ -31,12 +41,15 @@ public sealed class FromScratchIndexer : IPageIndexer
             var posting = GetOrCreate(byTerm, token.Value, pageOid);
             posting.TfContent++;
             posting.PositionsContent.Add(new PositionDataModel { Start = token.Start, End = token.End });
+            lengthContent++;
         }
 
-        if (byTerm.Count == 0) return Task.CompletedTask;
+        if (byTerm.Count == 0) return;
 
         var ops = byTerm.Select(kv => (kv.Key, kv.Value)).ToArray();
-        return _index.UpsertPostingsAsync(ops, ct);
+        await _index.UpsertPostingsAsync(ops, ct);
+        await _pages.UpdateLengthsAsync(page.Id, lengthTitle, lengthContent, ct);
+        await _stats.RecomputeAsync(ct);
     }
 
     private static PostingDataModel GetOrCreate(Dictionary<string, PostingDataModel> byTerm, string term, ObjectId docId)

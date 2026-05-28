@@ -1,7 +1,9 @@
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 using SearchEngine.FromScratch.Api.Endpoints;
 using SearchEngine.FromScratch.Api.Options;
 using SearchEngine.FromScratch.Api.Services;
+using SearchEngine.FromScratch.Core.Ranking;
 using SearchEngine.FromScratch.Infrastructure.Daos;
 using SearchEngine.FromScratch.Infrastructure.Searching;
 using SearchEngine.Shared.Domain.Interfaces;
@@ -11,10 +13,14 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<MongoOptions>(builder.Configuration.GetSection("Mongo"));
 builder.Services.Configure<TrieRefreshOptions>(builder.Configuration.GetSection("TrieRefresh"));
+builder.Services.Configure<Bm25Options>(builder.Configuration.GetSection("Bm25"));
 
 builder.Services.AddSharedMongo();
 builder.Services.AddScoped<IInvertedIndexDao, InvertedIndexDao>();
+builder.Services.AddScoped<IIndexStatsDao, IndexStatsDao>();
 builder.Services.AddScoped<ISearchEngine, FromScratchSearchEngine>();
+builder.Services.AddSingleton<Bm25Scorer>(sp =>
+    new Bm25Scorer(sp.GetRequiredService<IOptions<Bm25Options>>().Value));
 
 builder.Services.AddSingleton<TrieIndex>();
 builder.Services.AddHostedService<TrieRefreshService>();

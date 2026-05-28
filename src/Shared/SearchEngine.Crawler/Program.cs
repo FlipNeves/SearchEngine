@@ -15,6 +15,7 @@ builder.Services.Configure<MongoOptions>(builder.Configuration.GetSection("Mongo
 
 builder.Services.AddSharedMongo();
 builder.Services.AddScoped<IInvertedIndexDao, InvertedIndexDao>();
+builder.Services.AddScoped<IIndexStatsDao, IndexStatsDao>();
 builder.Services.AddScoped<IPageIndexer, FromScratchIndexer>();
 
 builder.Services.AddHttpClient("crawler", (sp, client) =>

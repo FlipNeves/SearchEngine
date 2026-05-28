@@ -15,4 +15,6 @@ public sealed class WebPageDataModel
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
     public DateTime CrawledAtUtc { get; set; }
+    public int LengthTitle { get; set; }
+    public int LengthContent { get; set; }
 }
