@@ -61,7 +61,7 @@ public sealed class TrieRefreshService : BackgroundService
         var loaded = 0;
         await foreach (var doc in dao.StreamAllAsync(ct))
         {
-            trie.Insert(doc.Word, doc.PageIds.Count);
+            trie.Insert(doc.Term, doc.Postings.Count);
             loaded++;
         }
 

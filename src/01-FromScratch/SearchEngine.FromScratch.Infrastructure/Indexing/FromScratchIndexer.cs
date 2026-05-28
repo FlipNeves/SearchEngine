@@ -1,6 +1,7 @@
 using MongoDB.Bson;
 using SearchEngine.FromScratch.Core.Text;
 using SearchEngine.FromScratch.Infrastructure.Daos;
+using SearchEngine.FromScratch.Infrastructure.DataModels;
 using SearchEngine.Shared.Domain.Entities;
 using SearchEngine.Shared.Domain.Interfaces;
 
@@ -16,11 +17,35 @@ public sealed class FromScratchIndexer : IPageIndexer
     {
         if (!ObjectId.TryParse(page.Id, out var pageOid)) return Task.CompletedTask;
 
-        var tokens = Tokenizer
-            .Tokenize($"{page.Title} {page.Content}")
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var byTerm = new Dictionary<string, PostingDataModel>(StringComparer.Ordinal);
 
-        return _index.UpsertPostingsAsync(tokens, pageOid, ct);
+        foreach (var token in Tokenizer.Tokenize(page.Title))
+        {
+            var posting = GetOrCreate(byTerm, token.Value, pageOid);
+            posting.TfTitle++;
+            posting.PositionsTitle.Add(new PositionDataModel { Start = token.Start, End = token.End });
+        }
+
+        foreach (var token in Tokenizer.Tokenize(page.Content))
+        {
+            var posting = GetOrCreate(byTerm, token.Value, pageOid);
+            posting.TfContent++;
+            posting.PositionsContent.Add(new PositionDataModel { Start = token.Start, End = token.End });
+        }
+
+        if (byTerm.Count == 0) return Task.CompletedTask;
+
+        var ops = byTerm.Select(kv => (kv.Key, kv.Value)).ToArray();
+        return _index.UpsertPostingsAsync(ops, ct);
+    }
+
+    private static PostingDataModel GetOrCreate(Dictionary<string, PostingDataModel> byTerm, string term, ObjectId docId)
+    {
+        if (!byTerm.TryGetValue(term, out var posting))
+        {
+            posting = new PostingDataModel { DocId = docId };
+            byTerm[term] = posting;
+        }
+        return posting;
     }
 }

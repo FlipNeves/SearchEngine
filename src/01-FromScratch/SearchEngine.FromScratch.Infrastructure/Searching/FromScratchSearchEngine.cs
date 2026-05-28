@@ -1,3 +1,4 @@
+using MongoDB.Bson;
 using SearchEngine.FromScratch.Core.Text;
 using SearchEngine.FromScratch.Infrastructure.Daos;
 using SearchEngine.Shared.Domain.Interfaces;
@@ -18,28 +19,43 @@ public sealed class FromScratchSearchEngine : ISearchEngine
 
     public async Task<SearchResponseDto> SearchAsync(string query, int top, CancellationToken ct = default)
     {
-        var tokens = Tokenizer
+        var terms = Tokenizer
             .Tokenize(query)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(t => t.Value)
+            .Distinct(StringComparer.Ordinal)
             .ToArray();
 
-        if (tokens.Length == 0)
+        if (terms.Length == 0)
             return Empty(query);
 
-        var entries = await _index.FindByWordsAsync(tokens, ct);
+        var entries = await _index.FindByTermsAsync(terms, ct);
         if (entries.Count == 0)
             return Empty(query);
 
-        var pageIds = entries
-            .SelectMany(e => e.PageIds.Select(o => o.ToString()))
-            .Distinct()
+        var scoreByDoc = new Dictionary<ObjectId, double>();
+        foreach (var entry in entries)
+            foreach (var posting in entry.Postings)
+            {
+                scoreByDoc.TryGetValue(posting.DocId, out var current);
+                scoreByDoc[posting.DocId] = current + posting.TfTitle + posting.TfContent;
+            }
+
+        var ranked = scoreByDoc
+            .OrderByDescending(kv => kv.Value)
+            .Take(top)
             .ToArray();
 
+        var pageIds = ranked.Select(kv => kv.Key.ToString()).ToArray();
         var pages = await _pages.ListByIdsAsync(pageIds, ct);
+        var pageById = pages.ToDictionary(p => p.Id, p => p);
 
-        var hits = pages
-            .Take(top)
-            .Select(p => new SearchHit(p.Url, p.Title, Truncate(p.Content, 200), 0.0))
+        var hits = ranked
+            .Where(kv => pageById.ContainsKey(kv.Key.ToString()))
+            .Select(kv =>
+            {
+                var p = pageById[kv.Key.ToString()];
+                return new SearchHit(p.Url, p.Title, Truncate(p.Content, 200), kv.Value);
+            })
             .ToArray();
 
         return new SearchResponseDto(query, hits, Array.Empty<string>(), null);

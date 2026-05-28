@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
-using MongoDB.Bson;
 using MongoDB.Driver;
 using SearchEngine.FromScratch.Infrastructure.DataModels;
 using SearchEngine.Shared.Persistence.Internal;
@@ -18,35 +17,39 @@ public sealed class InvertedIndexDao : IInvertedIndexDao
         _logger = logger;
     }
 
-    public async Task UpsertPostingsAsync(IReadOnlyCollection<string> words, ObjectId pageId, CancellationToken ct = default)
+    public async Task UpsertPostingsAsync(IReadOnlyCollection<(string Term, PostingDataModel Posting)> postings, CancellationToken ct = default)
     {
-        if (words.Count == 0) return;
+        if (postings.Count == 0) return;
 
-        var ops = new List<WriteModel<InvertedIndexDataModel>>(words.Count);
-        foreach (var word in words)
+        var ops = new List<WriteModel<InvertedIndexDataModel>>(postings.Count * 2);
+        foreach (var (term, posting) in postings)
         {
-            var filter = Builders<InvertedIndexDataModel>.Filter.Eq(d => d.Word, word);
-            var update = Builders<InvertedIndexDataModel>.Update
-                .SetOnInsert(d => d.Word, word)
-                .AddToSet(d => d.PageIds, pageId);
+            var termFilter = Builders<InvertedIndexDataModel>.Filter.Eq(d => d.Term, term);
 
-            ops.Add(new UpdateOneModel<InvertedIndexDataModel>(filter, update) { IsUpsert = true });
+            var pull = Builders<InvertedIndexDataModel>.Update
+                .PullFilter(d => d.Postings, p => p.DocId == posting.DocId);
+            ops.Add(new UpdateOneModel<InvertedIndexDataModel>(termFilter, pull));
+
+            var push = Builders<InvertedIndexDataModel>.Update
+                .SetOnInsert(d => d.Term, term)
+                .Push(d => d.Postings, posting);
+            ops.Add(new UpdateOneModel<InvertedIndexDataModel>(termFilter, push) { IsUpsert = true });
         }
 
         try
         {
-            await _collection.BulkWriteAsync(ops, new BulkWriteOptions { IsOrdered = false }, ct);
+            await _collection.BulkWriteAsync(ops, new BulkWriteOptions { IsOrdered = true }, ct);
         }
         catch (MongoBulkWriteException<InvertedIndexDataModel> ex)
         {
-            _logger.LogWarning(ex, "Partial bulk write for page {PageId}: {Errors} errors", pageId, ex.WriteErrors.Count);
+            _logger.LogWarning(ex, "Partial bulk write: {Errors} errors", ex.WriteErrors.Count);
         }
     }
 
-    public async Task<IReadOnlyList<InvertedIndexDataModel>> FindByWordsAsync(IReadOnlyCollection<string> words, CancellationToken ct = default)
+    public async Task<IReadOnlyList<InvertedIndexDataModel>> FindByTermsAsync(IReadOnlyCollection<string> terms, CancellationToken ct = default)
     {
-        if (words.Count == 0) return Array.Empty<InvertedIndexDataModel>();
-        var filter = Builders<InvertedIndexDataModel>.Filter.In(d => d.Word, words);
+        if (terms.Count == 0) return Array.Empty<InvertedIndexDataModel>();
+        var filter = Builders<InvertedIndexDataModel>.Filter.In(d => d.Term, terms);
         return await _collection.Find(filter).ToListAsync(ct);
     }
 
