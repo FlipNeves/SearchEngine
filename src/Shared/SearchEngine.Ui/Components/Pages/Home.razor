@@ -14,7 +14,7 @@
     }
     else if (response is not null)
     {
-        <DidYouMeanBanner Suggestion="response.DidYouMean" OnClick="HandleSearch" />
+        <DidYouMeanBanner Suggestion="response.DidYouMean" OnSearchOriginal="HandleSearchOriginal" />
         <ResultsList Hits="response.Results" />
     }
 </div>
@@ -23,14 +23,18 @@
     SearchResponseDto? response;
     bool loading;
 
-    async Task HandleSearch(string query)
+    Task HandleSearch(string query) => RunSearch(query, correct: true);
+
+    Task HandleSearchOriginal(string query) => RunSearch(query, correct: false);
+
+    async Task RunSearch(string query, bool correct)
     {
         if (string.IsNullOrWhiteSpace(query)) return;
         loading = true;
         StateHasChanged();
         try
         {
-            response = await Api.SearchAsync(query, 20, default);
+            response = await Api.SearchAsync(query, 20, correct, default);
         }
         finally
         {

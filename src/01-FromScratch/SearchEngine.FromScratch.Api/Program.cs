@@ -24,6 +24,7 @@ builder.Services.AddSingleton<Bm25Scorer>(sp =>
     new Bm25Scorer(sp.GetRequiredService<IOptions<Bm25Options>>().Value));
 
 builder.Services.AddSingleton<TrieIndex>();
+builder.Services.AddSingleton<ISpellCorrector, TrieSpellCorrector>();
 builder.Services.AddHostedService<TrieRefreshService>();
 
 const string UiCorsPolicy = "ui";

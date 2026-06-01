@@ -19,6 +19,7 @@ public sealed class FromScratchSearchEngine : ISearchEngine
     private readonly IIndexStatsDao _stats;
     private readonly Bm25Scorer _scorer;
     private readonly Bm25Options _options;
+    private readonly ISpellCorrector _corrector;
 
     public FromScratchSearchEngine(
         IInvertedIndexDao index,
@@ -26,7 +27,8 @@ public sealed class FromScratchSearchEngine : ISearchEngine
         IPagesRepository pages,
         IIndexStatsDao stats,
         Bm25Scorer scorer,
-        IOptions<Bm25Options> options)
+        IOptions<Bm25Options> options,
+        ISpellCorrector corrector)
     {
         _index = index;
         _phrase = phrase;
@@ -34,19 +36,45 @@ public sealed class FromScratchSearchEngine : ISearchEngine
         _stats = stats;
         _scorer = scorer;
         _options = options.Value;
+        _corrector = corrector;
     }
 
-    public async Task<SearchResponseDto> SearchAsync(string query, int top, CancellationToken ct = default)
+    public async Task<SearchResponseDto> SearchAsync(string query, int top, bool autoCorrect = true, CancellationToken ct = default)
     {
         var queryTokens = Tokenizer.Tokenize(query).ToArray();
         if (queryTokens.Length == 0) return Empty(query);
 
+        var ranking = await RankAsync(queryTokens, top, ct);
+
+        if (autoCorrect && ranking.MissingTerms.Count > 0 && _corrector.IsReady)
+        {
+            var corrected = TryCorrectTokens(queryTokens, ranking.MissingTerms);
+            if (corrected is not null)
+            {
+                var correctedQuery = string.Join(' ', corrected.Select(t => t.Value));
+                var correctedRanking = await RankAsync(corrected, top, ct);
+
+                // Decisão 1b: só auto-corrige se a correção de fato traz resultados.
+                if (correctedRanking.Hits.Count > 0)
+                    return new SearchResponseDto(correctedQuery, correctedRanking.Hits, new DidYouMean(query, correctedQuery));
+            }
+        }
+
+        return new SearchResponseDto(query, ranking.Hits, null);
+    }
+
+    private async Task<RankResult> RankAsync(Token[] queryTokens, int top, CancellationToken ct)
+    {
         var terms = queryTokens.Select(t => t.Value).Distinct(StringComparer.Ordinal).ToArray();
         var termEntries = await _index.FindByTermsAsync(terms, ct);
-        if (termEntries.Count == 0) return Empty(query);
+
+        var presentTerms = termEntries.Select(e => e.Term).ToHashSet(StringComparer.Ordinal);
+        var missingTerms = terms.Where(t => !presentTerms.Contains(t)).ToArray();
+
+        if (termEntries.Count == 0) return new RankResult(Array.Empty<SearchHit>(), missingTerms);
 
         var corpus = await _stats.GetAsync(ct);
-        if (corpus.TotalDocs == 0) return Empty(query);
+        if (corpus.TotalDocs == 0) return new RankResult(Array.Empty<SearchHit>(), missingTerms);
 
         var candidateIds = termEntries
             .SelectMany(e => e.Postings.Select(p => p.DocId.ToString()))
@@ -88,7 +116,7 @@ public sealed class FromScratchSearchEngine : ISearchEngine
             })
             .ToArray();
 
-        return new SearchResponseDto(query, hits, Array.Empty<string>(), null);
+        return new RankResult(hits, missingTerms);
 
         void Accumulate(IEnumerable<IReadOnlyList<PostingDataModel>> postingLists, double boost)
         {
@@ -110,9 +138,36 @@ public sealed class FromScratchSearchEngine : ISearchEngine
         }
     }
 
+    private Token[]? TryCorrectTokens(Token[] tokens, IReadOnlyCollection<string> missingTerms)
+    {
+        var missing = missingTerms.ToHashSet(StringComparer.Ordinal);
+        var corrected = new Token[tokens.Length];
+        var anyCorrected = false;
+
+        for (var i = 0; i < tokens.Length; i++)
+        {
+            var token = tokens[i];
+            if (missing.Contains(token.Value))
+            {
+                var fix = _corrector.Correct(token.Value);
+                if (fix is not null && !string.Equals(fix, token.Value, StringComparison.Ordinal))
+                {
+                    corrected[i] = new Token(fix, token.Start, token.End);
+                    anyCorrected = true;
+                    continue;
+                }
+            }
+            corrected[i] = token;
+        }
+
+        return anyCorrected ? corrected : null;
+    }
+
     private static SearchResponseDto Empty(string query)
-        => new(query, Array.Empty<SearchHit>(), Array.Empty<string>(), null);
+        => new(query, Array.Empty<SearchHit>(), null);
 
     private static string Truncate(string text, int max)
         => string.IsNullOrEmpty(text) || text.Length <= max ? text : text[..max] + "…";
+
+    private readonly record struct RankResult(IReadOnlyList<SearchHit> Hits, IReadOnlyList<string> MissingTerms);
 }
