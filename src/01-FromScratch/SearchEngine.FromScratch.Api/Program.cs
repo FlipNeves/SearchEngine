@@ -4,6 +4,7 @@ using SearchEngine.FromScratch.Api.Endpoints;
 using SearchEngine.FromScratch.Api.Options;
 using SearchEngine.FromScratch.Api.Services;
 using SearchEngine.FromScratch.Core.Ranking;
+using SearchEngine.FromScratch.Core.Text;
 using SearchEngine.FromScratch.Infrastructure.Daos;
 using SearchEngine.FromScratch.Infrastructure.Searching;
 using SearchEngine.Shared.Domain.Interfaces;
@@ -25,6 +26,7 @@ builder.Services.AddSingleton<Bm25Scorer>(sp =>
 
 builder.Services.AddSingleton<VocabularyIndex>();
 builder.Services.AddSingleton<ISpellCorrector, BkTreeSpellCorrector>();
+builder.Services.AddSingleton(LanguageDetector.Default());
 builder.Services.AddHostedService<VocabularyRefreshService>();
 
 const string UiCorsPolicy = "ui";

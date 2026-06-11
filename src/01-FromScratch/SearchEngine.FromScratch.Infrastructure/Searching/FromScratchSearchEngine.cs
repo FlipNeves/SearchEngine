@@ -20,6 +20,7 @@ public sealed class FromScratchSearchEngine : ISearchEngine
     private readonly Bm25Scorer _scorer;
     private readonly Bm25Options _options;
     private readonly ISpellCorrector _corrector;
+    private readonly LanguageDetector _language;
 
     public FromScratchSearchEngine(
         IInvertedIndexDao index,
@@ -28,7 +29,8 @@ public sealed class FromScratchSearchEngine : ISearchEngine
         IIndexStatsDao stats,
         Bm25Scorer scorer,
         IOptions<Bm25Options> options,
-        ISpellCorrector corrector)
+        ISpellCorrector corrector,
+        LanguageDetector language)
     {
         _index = index;
         _phrase = phrase;
@@ -37,6 +39,7 @@ public sealed class FromScratchSearchEngine : ISearchEngine
         _scorer = scorer;
         _options = options.Value;
         _corrector = corrector;
+        _language = language;
     }
 
     public async Task<SearchResponseDto> SearchAsync(string query, int top, bool autoCorrect = true, CancellationToken ct = default)
@@ -44,7 +47,9 @@ public sealed class FromScratchSearchEngine : ISearchEngine
         var queryTokens = Tokenizer.Tokenize(query).ToArray();
         if (queryTokens.Length == 0) return Empty(query);
 
-        var ranking = await RankAsync(queryTokens, top, ct);
+        var queryLanguage = _language.Detect(query);
+
+        var ranking = await RankAsync(queryTokens, top, queryLanguage, ct);
 
         if (autoCorrect && ranking.MissingTerms.Count > 0 && _corrector.IsReady)
         {
@@ -52,7 +57,7 @@ public sealed class FromScratchSearchEngine : ISearchEngine
             if (corrected is not null)
             {
                 var correctedQuery = string.Join(' ', corrected.Select(t => t.Value));
-                var correctedRanking = await RankAsync(corrected, top, ct);
+                var correctedRanking = await RankAsync(corrected, top, queryLanguage, ct);
 
                 // Decisão 1b: só auto-corrige se a correção de fato traz resultados.
                 if (correctedRanking.Hits.Count > 0)
@@ -63,7 +68,7 @@ public sealed class FromScratchSearchEngine : ISearchEngine
         return new SearchResponseDto(query, ranking.Hits, null);
     }
 
-    private async Task<RankResult> RankAsync(Token[] queryTokens, int top, CancellationToken ct)
+    private async Task<RankResult> RankAsync(Token[] queryTokens, int top, LanguageGuess queryLanguage, CancellationToken ct)
     {
         var terms = queryTokens.Select(t => t.Value).Distinct(StringComparer.Ordinal).ToArray();
         var termEntries = await _index.FindByTermsAsync(terms, ct);
@@ -129,13 +134,18 @@ public sealed class FromScratchSearchEngine : ISearchEngine
 
                     var titleScore = _scorer.Score(posting.TfTitle, df, corpus.TotalDocs, len.Title, corpus.AvgLengthTitle);
                     var contentScore = _scorer.Score(posting.TfContent, df, corpus.TotalDocs, len.Content, corpus.AvgLengthContent);
-                    var combined = boost * (_options.WTitle * titleScore + _options.WContent * contentScore);
+                    var combined = boost * LanguageFactor(len.Language) * (_options.WTitle * titleScore + _options.WContent * contentScore);
 
                     scoreByDoc.TryGetValue(posting.DocId, out var current);
                     scoreByDoc[posting.DocId] = current + combined;
                 }
             }
         }
+
+        double LanguageFactor(string docLanguage)
+            => queryLanguage.Confident && string.Equals(docLanguage, queryLanguage.Language, StringComparison.Ordinal)
+                ? _options.LanguageBoost
+                : 1.0;
     }
 
     private Token[]? TryCorrectTokens(Token[] tokens, IReadOnlyCollection<string> missingTerms)

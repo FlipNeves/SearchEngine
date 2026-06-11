@@ -50,13 +50,13 @@ public sealed class PagesRepository : IPagesRepository
         await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
     }
 
-    public async Task<IReadOnlyDictionary<string, (int Title, int Content)>> GetLengthsByIdsAsync(IReadOnlyCollection<string> ids, CancellationToken ct = default)
+    public async Task<IReadOnlyDictionary<string, (int Title, int Content, string Language)>> GetLengthsByIdsAsync(IReadOnlyCollection<string> ids, CancellationToken ct = default)
     {
         if (ids.Count == 0)
-            return new Dictionary<string, (int, int)>();
+            return new Dictionary<string, (int, int, string)>();
 
         var dms = await _generic.ListByIdsAsync(ids, ct);
-        return dms.ToDictionary(d => d.Id!, d => (d.LengthTitle, d.LengthContent));
+        return dms.ToDictionary(d => d.Id!, d => (d.LengthTitle, d.LengthContent, d.Language));
     }
 
     private static WebPageDataModel ToDataModel(WebPage p) => new()
