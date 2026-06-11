@@ -3,6 +3,7 @@ using Polly;
 using Polly.Extensions.Http;
 using SearchEngine.Crawler.Options;
 using SearchEngine.Crawler.Workers;
+using SearchEngine.FromScratch.Core.Text;
 using SearchEngine.FromScratch.Infrastructure.Daos;
 using SearchEngine.FromScratch.Infrastructure.Indexing;
 using SearchEngine.Shared.Domain.Interfaces;
@@ -18,6 +19,7 @@ builder.Services.AddScoped<IInvertedIndexDao, InvertedIndexDao>();
 builder.Services.AddScoped<IPhraseIndexDao, PhraseIndexDao>();
 builder.Services.AddScoped<IIndexStatsDao, IndexStatsDao>();
 builder.Services.AddScoped<IPageIndexer, FromScratchIndexer>();
+builder.Services.AddSingleton(LanguageDetector.Default());
 
 builder.Services.AddHttpClient("crawler", (sp, client) =>
 {

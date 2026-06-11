@@ -17,4 +17,5 @@ public sealed class WebPageDataModel
     public DateTime CrawledAtUtc { get; set; }
     public int LengthTitle { get; set; }
     public int LengthContent { get; set; }
+    public string Language { get; set; } = string.Empty;
 }

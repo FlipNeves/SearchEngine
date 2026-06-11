@@ -15,17 +15,20 @@ public sealed class FromScratchIndexer : IPageIndexer
     private readonly IPhraseIndexDao _phrase;
     private readonly IPagesRepository _pages;
     private readonly IIndexStatsDao _stats;
+    private readonly LanguageDetector _language;
 
     public FromScratchIndexer(
         IInvertedIndexDao index,
         IPhraseIndexDao phrase,
         IPagesRepository pages,
-        IIndexStatsDao stats)
+        IIndexStatsDao stats,
+        LanguageDetector language)
     {
         _index = index;
         _phrase = phrase;
         _pages = pages;
         _stats = stats;
+        _language = language;
     }
 
     public async Task IndexAsync(WebPage page, CancellationToken ct = default)
@@ -81,7 +84,8 @@ public sealed class FromScratchIndexer : IPageIndexer
 
         if (termOps.Length > 0 || phraseOps.Length > 0)
         {
-            await _pages.UpdateLengthsAsync(page.Id, titleTokens.Length, contentTokens.Length, ct);
+            var language = _language.Detect($"{page.Title} {page.Content}").Language;
+            await _pages.UpdateDerivedFieldsAsync(page.Id, titleTokens.Length, contentTokens.Length, language, ct);
             await _stats.RecomputeAsync(ct);
         }
     }

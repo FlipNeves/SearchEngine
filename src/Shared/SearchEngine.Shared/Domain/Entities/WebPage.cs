@@ -7,4 +7,5 @@ public sealed class WebPage
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
     public DateTime CrawledAtUtc { get; set; }
+    public string Language { get; set; } = string.Empty;
 }

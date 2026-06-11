@@ -37,14 +37,15 @@ public sealed class PagesRepository : IPagesRepository
         return dms.Select(ToDomain).ToArray();
     }
 
-    public async Task UpdateLengthsAsync(string id, int lengthTitle, int lengthContent, CancellationToken ct = default)
+    public async Task UpdateDerivedFieldsAsync(string id, int lengthTitle, int lengthContent, string language, CancellationToken ct = default)
     {
         if (!ObjectId.TryParse(id, out var oid)) return;
 
         var filter = Builders<WebPageDataModel>.Filter.Eq("_id", oid);
         var update = Builders<WebPageDataModel>.Update
             .Set(d => d.LengthTitle, lengthTitle)
-            .Set(d => d.LengthContent, lengthContent);
+            .Set(d => d.LengthContent, lengthContent)
+            .Set(d => d.Language, language);
 
         await _collection.UpdateOneAsync(filter, update, cancellationToken: ct);
     }
@@ -73,6 +74,7 @@ public sealed class PagesRepository : IPagesRepository
         Url = d.Url,
         Title = d.Title,
         Content = d.Content,
-        CrawledAtUtc = d.CrawledAtUtc
+        CrawledAtUtc = d.CrawledAtUtc,
+        Language = d.Language
     };
 }
