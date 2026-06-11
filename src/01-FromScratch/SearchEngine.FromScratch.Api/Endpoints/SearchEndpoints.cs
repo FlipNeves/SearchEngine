@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using SearchEngine.FromScratch.Api.Options;
 using SearchEngine.FromScratch.Api.Services;
 using SearchEngine.Shared.Domain.Interfaces;
 using SearchEngine.Shared.Dtos;
@@ -6,6 +8,9 @@ namespace SearchEngine.FromScratch.Api.Endpoints;
 
 public static class SearchEndpoints
 {
+    private const int FuzzyTriggerThreshold = 3;
+    private const int FuzzyMinPrefixLength = 4;
+
     public static IEndpointRouteBuilder MapSearchEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGet("/search", SearchAsync)
@@ -19,8 +24,8 @@ public static class SearchEndpoints
         app.MapGet("/autocomplete", Autocomplete)
             .WithName("Autocomplete")
             .WithTags("Search")
-            .WithSummary("Sugere completions para um prefixo (Trie em memória).")
-            .Produces<IEnumerable<string>>(StatusCodes.Status200OK)
+            .WithSummary("Sugere completions de prefixo (Trie) e, quando há poucas, correções fuzzy (BK-tree).")
+            .Produces<AutocompleteResponseDto>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
 
@@ -41,7 +46,11 @@ public static class SearchEndpoints
         return Results.Ok(response);
     }
 
-    private static IResult Autocomplete(string prefix, VocabularyIndex vocabulary, int top = 10)
+    private static IResult Autocomplete(
+        string prefix,
+        VocabularyIndex vocabulary,
+        IOptions<TrieRefreshOptions> options,
+        int top = 10)
     {
         if (string.IsNullOrWhiteSpace(prefix))
             return Results.Problem("query parameter 'prefix' is required", statusCode: 400);
@@ -49,7 +58,42 @@ public static class SearchEndpoints
         if (!vocabulary.IsReady)
             return Results.Problem("index is still loading, try again in a few seconds", statusCode: 503);
 
-        var suggestions = vocabulary.Current.Trie.Autocomplete(prefix).Take(top);
-        return Results.Ok(suggestions);
+        var suggestions = BuildSuggestions(
+            vocabulary.Current,
+            prefix.Trim().ToLowerInvariant(),
+            top,
+            options.Value.MaxSuggestionDistance);
+
+        return Results.Ok(new AutocompleteResponseDto(prefix, suggestions));
+    }
+
+    private static IReadOnlyList<AutocompleteSuggestion> BuildSuggestions(
+        VocabularySnapshot snapshot, string prefix, int top, int maxDistance)
+    {
+        var result = new List<AutocompleteSuggestion>(top);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var word in snapshot.Trie.Autocomplete(prefix).Take(top))
+            if (seen.Add(word))
+                result.Add(new AutocompleteSuggestion(word, IsCorrection: false));
+
+        var needsFuzzy = result.Count < FuzzyTriggerThreshold && prefix.Length >= FuzzyMinPrefixLength;
+        if (needsFuzzy)
+        {
+            var fuzzy = snapshot.BkTree.Search(prefix, maxDistance)
+                .Where(m => m.Distance > 0 && !seen.Contains(m.Word))
+                .OrderBy(m => m.Distance)
+                .ThenByDescending(m => snapshot.Trie.Frequency(m.Word))
+                .Select(m => m.Word);
+
+            foreach (var word in fuzzy)
+            {
+                if (result.Count >= top) break;
+                if (seen.Add(word))
+                    result.Add(new AutocompleteSuggestion(word, IsCorrection: true));
+            }
+        }
+
+        return result;
     }
 }

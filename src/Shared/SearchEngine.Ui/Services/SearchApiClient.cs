@@ -19,12 +19,11 @@ public sealed class SearchApiClient : ISearchApi
         return await resp.Content.ReadFromJsonAsync<SearchResponseDto>(_json, ct);
     }
 
-    public async Task<IReadOnlyList<string>> AutocompleteAsync(string prefix, int top, CancellationToken ct)
+    public async Task<AutocompleteResponseDto?> AutocompleteAsync(string prefix, int top, CancellationToken ct)
     {
         var url = $"/autocomplete?prefix={Uri.EscapeDataString(prefix)}&top={top}";
         var resp = await _http.GetAsync(url, ct);
-        if (!resp.IsSuccessStatusCode) return Array.Empty<string>();
-        var list = await resp.Content.ReadFromJsonAsync<List<string>>(_json, ct);
-        return list ?? new List<string>();
+        if (!resp.IsSuccessStatusCode) return null;
+        return await resp.Content.ReadFromJsonAsync<AutocompleteResponseDto>(_json, ct);
     }
 }

@@ -44,6 +44,13 @@ public sealed class Trie
         lock (_gate) { return _frequencies.Keys.ToArray(); }
     }
 
+    public int Frequency(string word)
+    {
+        if (string.IsNullOrWhiteSpace(word)) return 0;
+        var normalized = word.Trim().ToLowerInvariant();
+        lock (_gate) { return _frequencies.TryGetValue(normalized, out var freq) ? freq : 0; }
+    }
+
     public IReadOnlyList<string> Autocomplete(string prefix)
     {
         if (string.IsNullOrEmpty(prefix)) return Array.Empty<string>();

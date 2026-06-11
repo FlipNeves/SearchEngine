@@ -82,6 +82,11 @@ main.container {
     color: var(--se-fg-strong);
 }
 
+.autocomplete li.correction {
+    font-style: italic;
+    color: var(--se-warn);
+}
+
 .did-you-mean {
     margin: 1rem 0;
     font-style: italic;

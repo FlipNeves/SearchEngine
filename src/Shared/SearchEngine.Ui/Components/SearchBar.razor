@@ -14,7 +14,7 @@
         <ul class="autocomplete">
             @foreach (var s in suggestions)
             {
-                <li @onclick="() => PickSuggestion(s)">@s</li>
+                <li class="@(s.IsCorrection ? "correction" : null)" @onclick="() => PickSuggestion(s.Text)">@s.Text</li>
             }
         </ul>
     }
@@ -24,7 +24,7 @@
     [Parameter] public EventCallback<string> OnSearch { get; set; }
 
     string text = "";
-    IReadOnlyList<string> suggestions = Array.Empty<string>();
+    IReadOnlyList<AutocompleteSuggestion> suggestions = Array.Empty<AutocompleteSuggestion>();
     bool showSuggestions;
     CancellationTokenSource _debounceCts = new();
 
@@ -44,13 +44,18 @@
             var prefix = LastWord(text);
             if (prefix.Length < 2)
             {
-                suggestions = Array.Empty<string>();
+                suggestions = Array.Empty<AutocompleteSuggestion>();
                 showSuggestions = false;
                 StateHasChanged();
                 return;
             }
 
-            suggestions = await Api.AutocompleteAsync(prefix, 10, token);
+            var response = await Api.AutocompleteAsync(prefix, 10, token);
+
+            if (response is null || !string.Equals(response.Prefix, LastWord(text), StringComparison.Ordinal))
+                return;
+
+            suggestions = response.Suggestions;
             showSuggestions = suggestions.Count > 0;
             StateHasChanged();
         }
