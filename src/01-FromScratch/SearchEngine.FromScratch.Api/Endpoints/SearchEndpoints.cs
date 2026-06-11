@@ -41,15 +41,15 @@ public static class SearchEndpoints
         return Results.Ok(response);
     }
 
-    private static IResult Autocomplete(string prefix, TrieIndex trieIndex, int top = 10)
+    private static IResult Autocomplete(string prefix, VocabularyIndex vocabulary, int top = 10)
     {
         if (string.IsNullOrWhiteSpace(prefix))
             return Results.Problem("query parameter 'prefix' is required", statusCode: 400);
 
-        if (!trieIndex.IsReady)
+        if (!vocabulary.IsReady)
             return Results.Problem("index is still loading, try again in a few seconds", statusCode: 503);
 
-        var suggestions = trieIndex.Current.Autocomplete(prefix).Take(top);
+        var suggestions = vocabulary.Current.Trie.Autocomplete(prefix).Take(top);
         return Results.Ok(suggestions);
     }
 }

@@ -2,25 +2,28 @@ using System.Diagnostics;
 using Microsoft.Extensions.Options;
 using SearchEngine.FromScratch.Api.Options;
 using SearchEngine.FromScratch.Core.Indexing;
+using SearchEngine.FromScratch.Core.Text;
 using SearchEngine.FromScratch.Infrastructure.Daos;
 
 namespace SearchEngine.FromScratch.Api.Services;
 
-public sealed class TrieRefreshService : BackgroundService
+// Periodically rebuilds the in-memory vocabulary from the inverted index and swaps it in
+// atomically. Builds the Trie and the BK-tree from the same stream, so they stay in sync.
+public sealed class VocabularyRefreshService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly TrieIndex _trieIndex;
+    private readonly VocabularyIndex _vocabulary;
     private readonly TrieRefreshOptions _options;
-    private readonly ILogger<TrieRefreshService> _logger;
+    private readonly ILogger<VocabularyRefreshService> _logger;
 
-    public TrieRefreshService(
+    public VocabularyRefreshService(
         IServiceScopeFactory scopeFactory,
-        TrieIndex trieIndex,
+        VocabularyIndex vocabulary,
         IOptions<TrieRefreshOptions> options,
-        ILogger<TrieRefreshService> logger)
+        ILogger<VocabularyRefreshService> logger)
     {
         _scopeFactory = scopeFactory;
-        _trieIndex = trieIndex;
+        _vocabulary = vocabulary;
         _options = options.Value;
         _logger = logger;
     }
@@ -39,7 +42,7 @@ public sealed class TrieRefreshService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Trie refresh failed; retrying in {Interval}", _options.RefreshInterval);
+                _logger.LogError(ex, "Vocabulary refresh failed; retrying in {Interval}", _options.RefreshInterval);
             }
 
             try
@@ -54,6 +57,7 @@ public sealed class TrieRefreshService : BackgroundService
     {
         var sw = Stopwatch.StartNew();
         var trie = new Trie(topN: _options.TopSuggestionsPerNode);
+        var bkTree = new BkTree(DamerauLevenshtein.Distance);
 
         using var scope = _scopeFactory.CreateScope();
         var dao = scope.ServiceProvider.GetRequiredService<IInvertedIndexDao>();
@@ -62,10 +66,11 @@ public sealed class TrieRefreshService : BackgroundService
         await foreach (var doc in dao.StreamAllAsync(ct))
         {
             trie.Insert(doc.Term, doc.Postings.Count);
+            bkTree.Add(doc.Term);
             loaded++;
         }
 
-        _trieIndex.Replace(trie);
-        _logger.LogInformation("Trie refreshed: {Words} words in {Elapsed} ms", loaded, sw.ElapsedMilliseconds);
+        _vocabulary.Replace(new VocabularySnapshot { Trie = trie, BkTree = bkTree });
+        _logger.LogInformation("Vocabulary refreshed: {Words} words in {Elapsed} ms", loaded, sw.ElapsedMilliseconds);
     }
 }

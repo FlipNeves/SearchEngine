@@ -23,9 +23,9 @@ builder.Services.AddScoped<ISearchEngine, FromScratchSearchEngine>();
 builder.Services.AddSingleton<Bm25Scorer>(sp =>
     new Bm25Scorer(sp.GetRequiredService<IOptions<Bm25Options>>().Value));
 
-builder.Services.AddSingleton<TrieIndex>();
-builder.Services.AddSingleton<ISpellCorrector, TrieSpellCorrector>();
-builder.Services.AddHostedService<TrieRefreshService>();
+builder.Services.AddSingleton<VocabularyIndex>();
+builder.Services.AddSingleton<ISpellCorrector, BkTreeSpellCorrector>();
+builder.Services.AddHostedService<VocabularyRefreshService>();
 
 const string UiCorsPolicy = "ui";
 builder.Services.AddCors(opts => opts.AddPolicy(UiCorsPolicy, p => p

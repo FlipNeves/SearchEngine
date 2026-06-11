@@ -1,28 +1,28 @@
 using Microsoft.Extensions.Options;
 using SearchEngine.FromScratch.Api.Options;
-using SearchEngine.FromScratch.Core.Text;
 using SearchEngine.Shared.Domain.Interfaces;
 
 namespace SearchEngine.FromScratch.Api.Services;
 
-// Scan linear sobre o vocabulário em memória do Trie. Vive na API porque o vocabulário
-// (TrieIndex) é um serviço desta camada; a BK-tree da Fase 4b substitui o scan aqui dentro.
-public sealed class TrieSpellCorrector : ISpellCorrector
+// Spell correction over the in-memory vocabulary. Queries the BK-tree for candidates within
+// MaxSuggestionDistance edits (Damerau-Levenshtein), then picks the best by a small heuristic:
+// fewer edits win, ties broken toward longer shared prefix (typos usually keep the head).
+public sealed class BkTreeSpellCorrector : ISpellCorrector
 {
-    private readonly TrieIndex _trieIndex;
+    private readonly VocabularyIndex _vocabulary;
     private readonly int _maxDistance;
 
-    public TrieSpellCorrector(TrieIndex trieIndex, IOptions<TrieRefreshOptions> options)
+    public BkTreeSpellCorrector(VocabularyIndex vocabulary, IOptions<TrieRefreshOptions> options)
     {
-        _trieIndex = trieIndex;
+        _vocabulary = vocabulary;
         _maxDistance = options.Value.MaxSuggestionDistance;
     }
 
-    public bool IsReady => _trieIndex.IsReady;
+    public bool IsReady => _vocabulary.IsReady;
 
     public string? Correct(string term)
     {
-        if (string.IsNullOrWhiteSpace(term) || !_trieIndex.IsReady) return null;
+        if (string.IsNullOrWhiteSpace(term) || !_vocabulary.IsReady) return null;
 
         var query = term.Trim().ToLowerInvariant();
 
@@ -30,12 +30,9 @@ public sealed class TrieSpellCorrector : ISpellCorrector
         var bestScore = int.MaxValue;
         var bestDistance = int.MaxValue;
 
-        foreach (var word in _trieIndex.Current.AllWords())
+        foreach (var (word, distance) in _vocabulary.Current.BkTree.Search(query, _maxDistance))
         {
-            if (Math.Abs(word.Length - query.Length) > _maxDistance) continue;
-
-            var distance = Levenshtein.Distance(word, query);
-            if (distance == 0 || distance > _maxDistance) continue;
+            if (distance == 0) continue; // exact match: not an OOV correction
 
             var prefix = CommonPrefixLength(word, query);
             var score = distance * 10 - prefix * 2;
