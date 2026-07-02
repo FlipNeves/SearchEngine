@@ -10,5 +10,8 @@
     <Project Path="src/01-FromScratch/SearchEngine.FromScratch.Infrastructure/SearchEngine.FromScratch.Infrastructure.csproj" />
     <Project Path="src/01-FromScratch/SearchEngine.FromScratch.Api/SearchEngine.FromScratch.Api.csproj" />
   </Folder>
-  <Folder Name="/02-AtlasSearch/" />
+  <Folder Name="/02-AtlasSearch/">
+    <Project Path="src/02-AtlasSearch/SearchEngine.AtlasSearch.Infrastructure/SearchEngine.AtlasSearch.Infrastructure.csproj" />
+    <Project Path="src/02-AtlasSearch/SearchEngine.AtlasSearch.Api/SearchEngine.AtlasSearch.Api.csproj" />
+  </Folder>
 </Solution>
