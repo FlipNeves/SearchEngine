@@ -7,56 +7,113 @@ public static class Tokenizer
 {
     public static IEnumerable<Token> Tokenize(string text, bool removeStopwords = true)
     {
-        if (string.IsNullOrWhiteSpace(text)) yield break;
+        var tokens = new List<Token>();
+        if (string.IsNullOrWhiteSpace(text)) return tokens;
 
         var buffer = new StringBuilder();
+        var pendingSymbols = new StringBuilder();
         var tokenStart = -1;
+        var pendingDotStart = -1;
         var charIndex = 0;
+
+        void Emit(int end)
+        {
+            if (buffer.Length == 0)
+            {
+                pendingSymbols.Clear();
+                tokenStart = -1;
+                return;
+            }
+
+            if (pendingSymbols.Length > 0)
+            {
+                buffer.Append(pendingSymbols);
+                pendingSymbols.Clear();
+            }
+
+            var value = buffer.ToString();
+            var start = tokenStart;
+            buffer.Clear();
+            tokenStart = -1;
+
+            if (value.Length >= 2 && (!removeStopwords || !PortugueseStopwords.Contains(value)))
+                tokens.Add(new Token(value, start, end));
+        }
 
         foreach (var origRune in text.EnumerateRunes())
         {
             var runeLen = origRune.Utf16SequenceLength;
-            var decomposed = origRune.ToString().Normalize(NormalizationForm.FormD);
+            var wordChars = ExtractWordChars(origRune);
 
-            var addedWordChar = false;
-            foreach (var dRune in decomposed.EnumerateRunes())
+            if (wordChars.Length > 0)
             {
-                var category = Rune.GetUnicodeCategory(dRune);
-                if (category is UnicodeCategory.NonSpacingMark)
-                    continue;
+                if (pendingSymbols.Length > 0)
+                {
+                    var wordEnd = charIndex - pendingSymbols.Length;
+                    pendingSymbols.Clear();
+                    Emit(wordEnd);
+                }
 
-                var isWord = category is UnicodeCategory.LowercaseLetter
-                                      or UnicodeCategory.UppercaseLetter
-                                      or UnicodeCategory.OtherLetter
-                                      or UnicodeCategory.DecimalDigitNumber;
-
-                if (!isWord) continue;
+                if (pendingDotStart >= 0)
+                {
+                    tokenStart = pendingDotStart;
+                    buffer.Append('.');
+                    pendingDotStart = -1;
+                }
 
                 if (tokenStart < 0) tokenStart = charIndex;
-                foreach (var ch in dRune.ToString())
-                    buffer.Append(char.ToLowerInvariant(ch));
-                addedWordChar = true;
+                buffer.Append(wordChars);
             }
-
-            if (!addedWordChar && buffer.Length > 0)
+            else if (origRune.Value == '.')
             {
-                var value = buffer.ToString();
-                var start = tokenStart;
-                var end = charIndex;
-                buffer.Clear();
-                tokenStart = -1;
-                if (value.Length >= 2 && (!removeStopwords || !PortugueseStopwords.Contains(value)))
-                    yield return new Token(value, start, end);
+                if (buffer.Length > 0)
+                    Emit(charIndex);
+                else if (pendingDotStart < 0)
+                    pendingDotStart = charIndex;
+            }
+            else if (origRune.Value is '#' or '+')
+            {
+                if (buffer.Length > 0)
+                    pendingSymbols.Append((char)origRune.Value);
+                else
+                    pendingDotStart = -1;
+            }
+            else
+            {
+                Emit(charIndex);
+                pendingDotStart = -1;
             }
 
             charIndex += runeLen;
         }
 
-        if (buffer.Length > 0)
+        Emit(charIndex);
+        return tokens;
+    }
+
+    private static string ExtractWordChars(Rune origRune)
+    {
+        var decomposed = origRune.ToString().Normalize(NormalizationForm.FormD);
+
+        StringBuilder? sb = null;
+        foreach (var dRune in decomposed.EnumerateRunes())
         {
-            var value = buffer.ToString();
-            if (value.Length >= 2 && (!removeStopwords || !PortugueseStopwords.Contains(value)))
-                yield return new Token(value, tokenStart, charIndex);
+            var category = Rune.GetUnicodeCategory(dRune);
+            if (category is UnicodeCategory.NonSpacingMark)
+                continue;
+
+            var isWord = category is UnicodeCategory.LowercaseLetter
+                                  or UnicodeCategory.UppercaseLetter
+                                  or UnicodeCategory.OtherLetter
+                                  or UnicodeCategory.DecimalDigitNumber;
+            if (!isWord)
+                continue;
+
+            sb ??= new StringBuilder();
+            foreach (var ch in dRune.ToString())
+                sb.Append(char.ToLowerInvariant(ch));
         }
+
+        return sb?.ToString() ?? string.Empty;
     }
 }
