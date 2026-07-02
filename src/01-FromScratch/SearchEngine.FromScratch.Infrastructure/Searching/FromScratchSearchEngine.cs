@@ -103,6 +103,8 @@ public sealed class FromScratchSearchEngine : ISearchEngine
             Accumulate(phraseEntries.Select(e => e.Postings), boost: _options.PhraseBoost);
         }
 
+        ApplyProximity(termEntries);
+
         var ranked = scoreByDoc
             .OrderByDescending(kv => kv.Value)
             .Take(top)
@@ -146,6 +148,80 @@ public sealed class FromScratchSearchEngine : ISearchEngine
             => queryLanguage.Confident && string.Equals(docLanguage, queryLanguage.Language, StringComparison.Ordinal)
                 ? _options.LanguageBoost
                 : 1.0;
+
+        void ApplyProximity(IReadOnlyList<InvertedIndexDataModel> entries)
+        {
+            if (_options.ProximityBoost <= 0 || entries.Count < 2) return;
+
+            var termListsByDoc = new Dictionary<ObjectId, List<int[]>>();
+            foreach (var entry in entries)
+            {
+                foreach (var posting in entry.Postings)
+                {
+                    if (posting.PositionsContent.Count == 0) continue;
+
+                    var starts = new int[posting.PositionsContent.Count];
+                    for (var i = 0; i < starts.Length; i++)
+                        starts[i] = posting.PositionsContent[i].Start;
+
+                    if (!termListsByDoc.TryGetValue(posting.DocId, out var lists))
+                        termListsByDoc[posting.DocId] = lists = new List<int[]>();
+                    lists.Add(starts);
+                }
+            }
+
+            foreach (var (docId, lists) in termListsByDoc)
+            {
+                if (lists.Count < 2 || !scoreByDoc.ContainsKey(docId)) continue;
+
+                var span = MinWindowSpan(lists);
+                if (span < 0) continue;
+
+                var factor = 1.0 + _options.ProximityBoost * (_options.ProximityScale / (_options.ProximityScale + span));
+                scoreByDoc[docId] *= factor;
+            }
+        }
+    }
+
+    private static int MinWindowSpan(List<int[]> sortedLists)
+    {
+        var k = sortedLists.Count;
+        var pointers = new int[k];
+        var currentMax = int.MinValue;
+
+        foreach (var list in sortedLists)
+        {
+            if (list.Length == 0) return -1;
+            if (list[0] > currentMax) currentMax = list[0];
+        }
+
+        var best = int.MaxValue;
+        while (true)
+        {
+            var minList = 0;
+            var minVal = sortedLists[0][pointers[0]];
+            for (var i = 1; i < k; i++)
+            {
+                var value = sortedLists[i][pointers[i]];
+                if (value < minVal)
+                {
+                    minVal = value;
+                    minList = i;
+                }
+            }
+
+            var window = currentMax - minVal;
+            if (window < best) best = window;
+            if (best == 0) break;
+
+            pointers[minList]++;
+            if (pointers[minList] == sortedLists[minList].Length) break;
+
+            var advanced = sortedLists[minList][pointers[minList]];
+            if (advanced > currentMax) currentMax = advanced;
+        }
+
+        return best;
     }
 
     private Token[]? TryCorrectTokens(Token[] tokens, IReadOnlyCollection<string> missingTerms)

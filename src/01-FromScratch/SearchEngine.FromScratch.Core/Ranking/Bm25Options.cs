@@ -8,4 +8,6 @@ public sealed class Bm25Options
     public double WContent { get; set; } = 1.0;
     public double PhraseBoost { get; set; } = 2.0;
     public double LanguageBoost { get; set; } = 2.0;
+    public double ProximityBoost { get; set; } = 0.5;
+    public double ProximityScale { get; set; } = 40.0;
 }
