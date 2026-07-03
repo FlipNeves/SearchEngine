@@ -4,6 +4,7 @@ using SearchEngine.FromScratch.Infrastructure.Daos;
 using SearchEngine.FromScratch.Infrastructure.DataModels;
 using SearchEngine.Shared.Domain.Entities;
 using SearchEngine.Shared.Domain.Interfaces;
+using SearchEngine.Shared.Text;
 
 namespace SearchEngine.FromScratch.Infrastructure.Indexing;
 

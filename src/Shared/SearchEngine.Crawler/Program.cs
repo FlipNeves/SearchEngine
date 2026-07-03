@@ -3,11 +3,11 @@ using Polly;
 using Polly.Extensions.Http;
 using SearchEngine.Crawler.Options;
 using SearchEngine.Crawler.Workers;
-using SearchEngine.FromScratch.Core.Text;
 using SearchEngine.FromScratch.Infrastructure.Daos;
 using SearchEngine.FromScratch.Infrastructure.Indexing;
 using SearchEngine.Shared.Domain.Interfaces;
 using SearchEngine.Shared.Persistence;
+using SearchEngine.Shared.Text;
 
 var builder = Host.CreateApplicationBuilder(args);
 

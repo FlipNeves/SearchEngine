@@ -5,6 +5,7 @@ using SearchEngine.AtlasSearch.Infrastructure.Indexing;
 using SearchEngine.AtlasSearch.Infrastructure.Searching;
 using SearchEngine.Shared.Domain.Interfaces;
 using SearchEngine.Shared.Persistence;
+using SearchEngine.Shared.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,6 +13,7 @@ builder.Services.Configure<MongoOptions>(builder.Configuration.GetSection("Mongo
 builder.Services.Configure<AtlasSearchOptions>(builder.Configuration.GetSection("AtlasSearch"));
 
 builder.Services.AddSharedMongo();
+builder.Services.AddSingleton(LanguageDetector.Default());
 builder.Services.AddScoped<ISearchEngine, AtlasSearchEngine>();
 builder.Services.AddHostedService<SearchIndexInitializer>();
 

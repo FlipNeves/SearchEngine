@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace SearchEngine.FromScratch.Core.Text;
+namespace SearchEngine.Shared.Text;
 
 public sealed class NGramProfile
 {

@@ -1,4 +1,4 @@
-namespace SearchEngine.FromScratch.Core.Text;
+namespace SearchEngine.Shared.Text;
 
 internal static class LanguageSamples
 {

@@ -4,11 +4,11 @@ using SearchEngine.FromScratch.Api.Endpoints;
 using SearchEngine.FromScratch.Api.Options;
 using SearchEngine.FromScratch.Api.Services;
 using SearchEngine.FromScratch.Core.Ranking;
-using SearchEngine.FromScratch.Core.Text;
 using SearchEngine.FromScratch.Infrastructure.Daos;
 using SearchEngine.FromScratch.Infrastructure.Searching;
 using SearchEngine.Shared.Domain.Interfaces;
 using SearchEngine.Shared.Persistence;
+using SearchEngine.Shared.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 

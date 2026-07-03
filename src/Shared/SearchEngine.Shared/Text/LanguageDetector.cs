@@ -1,4 +1,4 @@
-namespace SearchEngine.FromScratch.Core.Text;
+namespace SearchEngine.Shared.Text;
 
 public readonly record struct LanguageGuess(string Language, bool Confident);
 
