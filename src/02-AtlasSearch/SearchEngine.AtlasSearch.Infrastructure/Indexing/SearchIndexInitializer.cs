@@ -15,7 +15,10 @@ public sealed class SearchIndexInitializer : IHostedService
           "mappings": {
             "dynamic": false,
             "fields": {
-              "title": { "type": "string" },
+              "title": [
+                { "type": "string" },
+                { "type": "autocomplete" }
+              ],
               "content": { "type": "string" },
               "language": { "type": "token" }
             }
@@ -40,19 +43,43 @@ public sealed class SearchIndexInitializer : IHostedService
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         var pages = CollectionResolver.Resolve<WebPageDataModel>(_database);
+        var definition = BsonDocument.Parse(IndexDefinitionJson);
 
         using var cursor = await pages.SearchIndexes.ListAsync(cancellationToken: cancellationToken);
-        var existing = await cursor.ToListAsync(cancellationToken);
-        if (existing.Any(i => i["name"].AsString == _options.IndexName))
+        var indexes = await cursor.ToListAsync(cancellationToken);
+        var existing = indexes.FirstOrDefault(i => i["name"].AsString == _options.IndexName);
+
+        if (existing is null)
         {
-            _logger.LogInformation("Search index {IndexName} already exists", _options.IndexName);
+            var model = new CreateSearchIndexModel(_options.IndexName, definition);
+            await pages.SearchIndexes.CreateOneAsync(model, cancellationToken);
+            _logger.LogInformation("Search index {IndexName} created; mongot build may take a minute", _options.IndexName);
             return;
         }
 
-        var model = new CreateSearchIndexModel(_options.IndexName, BsonDocument.Parse(IndexDefinitionJson));
-        await pages.SearchIndexes.CreateOneAsync(model, cancellationToken);
-        _logger.LogInformation("Search index {IndexName} created; mongot build may take a minute", _options.IndexName);
+        if (HasAutocompleteOnTitle(existing))
+        {
+            _logger.LogInformation("Search index {IndexName} already up to date", _options.IndexName);
+            return;
+        }
+
+        await pages.SearchIndexes.UpdateAsync(_options.IndexName, definition, cancellationToken);
+        _logger.LogInformation("Search index {IndexName} updated with autocomplete mapping; mongot rebuild may take a minute", _options.IndexName);
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    private static bool HasAutocompleteOnTitle(BsonValue index)
+    {
+        if (!index.AsBsonDocument.TryGetValue("latestDefinition", out var definition)
+            || !definition.AsBsonDocument.TryGetValue("mappings", out var mappings)
+            || !mappings.AsBsonDocument.TryGetValue("fields", out var fields)
+            || !fields.AsBsonDocument.TryGetValue("title", out var title))
+            return false;
+
+        var titleMappings = title is BsonArray array ? array : new BsonArray { title };
+        return titleMappings
+            .OfType<BsonDocument>()
+            .Any(m => m.TryGetValue("type", out var type) && type == "autocomplete");
+    }
 }

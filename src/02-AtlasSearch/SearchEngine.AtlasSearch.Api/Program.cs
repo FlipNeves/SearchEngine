@@ -15,6 +15,7 @@ builder.Services.Configure<AtlasSearchOptions>(builder.Configuration.GetSection(
 builder.Services.AddSharedMongo();
 builder.Services.AddSingleton(LanguageDetector.Default());
 builder.Services.AddScoped<ISearchEngine, AtlasSearchEngine>();
+builder.Services.AddScoped<AtlasAutocomplete>();
 builder.Services.AddHostedService<SearchIndexInitializer>();
 
 const string UiCorsPolicy = "ui";
