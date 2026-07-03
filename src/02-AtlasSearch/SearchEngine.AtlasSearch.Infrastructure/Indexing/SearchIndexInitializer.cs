@@ -16,13 +16,23 @@ public sealed class SearchIndexInitializer : IHostedService
             "dynamic": false,
             "fields": {
               "title": [
-                { "type": "string" },
+                { "type": "string", "analyzer": "folding" },
                 { "type": "autocomplete" }
               ],
-              "content": { "type": "string" },
+              "content": { "type": "string", "analyzer": "folding" },
               "language": { "type": "token" }
             }
-          }
+          },
+          "analyzers": [
+            {
+              "name": "folding",
+              "tokenizer": { "type": "standard" },
+              "tokenFilters": [
+                { "type": "lowercase" },
+                { "type": "asciiFolding" }
+              ]
+            }
+          ]
         }
         """;
 
@@ -57,14 +67,14 @@ public sealed class SearchIndexInitializer : IHostedService
             return;
         }
 
-        if (HasAutocompleteOnTitle(existing))
+        if (HasAutocompleteOnTitle(existing) && HasFoldingAnalyzer(existing))
         {
             _logger.LogInformation("Search index {IndexName} already up to date", _options.IndexName);
             return;
         }
 
         await pages.SearchIndexes.UpdateAsync(_options.IndexName, definition, cancellationToken);
-        _logger.LogInformation("Search index {IndexName} updated with autocomplete mapping; mongot rebuild may take a minute", _options.IndexName);
+        _logger.LogInformation("Search index {IndexName} updated; mongot rebuild may take a minute", _options.IndexName);
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -82,4 +92,11 @@ public sealed class SearchIndexInitializer : IHostedService
             .OfType<BsonDocument>()
             .Any(m => m.TryGetValue("type", out var type) && type == "autocomplete");
     }
+
+    private static bool HasFoldingAnalyzer(BsonValue index)
+        => index.AsBsonDocument.TryGetValue("latestDefinition", out var definition)
+            && definition.AsBsonDocument.TryGetValue("analyzers", out var analyzers)
+            && analyzers is BsonArray array
+            && array.OfType<BsonDocument>()
+                .Any(a => a.TryGetValue("name", out var name) && name == "folding");
 }
