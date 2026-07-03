@@ -1,10 +1,19 @@
 @page "/"
 @inject ISearchApi Api
+@inject EngineSelection Engines
 
 <PageTitle>SearchEngine</PageTitle>
 
 <div class="search-page">
     <h1 class="logo">SearchEngine</h1>
+
+    <div class="engine-toggle" role="group">
+        @foreach (var engine in Engines.Engines)
+        {
+            <button class="@(engine.Key == Engines.Current.Key ? null : "outline")"
+                    @onclick="() => SelectEngineAsync(engine.Key)">@engine.Name</button>
+        }
+    </div>
 
     <SearchBar OnSearch="HandleSearch" />
 
@@ -22,14 +31,26 @@
 @code {
     SearchResponseDto? response;
     bool loading;
+    string lastQuery = "";
+    bool lastCorrect = true;
 
     Task HandleSearch(string query) => RunSearch(query, correct: true);
 
     Task HandleSearchOriginal(string query) => RunSearch(query, correct: false);
 
+    async Task SelectEngineAsync(string key)
+    {
+        if (key == Engines.Current.Key) return;
+        Engines.Select(key);
+        if (!string.IsNullOrWhiteSpace(lastQuery))
+            await RunSearch(lastQuery, lastCorrect);
+    }
+
     async Task RunSearch(string query, bool correct)
     {
         if (string.IsNullOrWhiteSpace(query)) return;
+        lastQuery = query;
+        lastCorrect = correct;
         loading = true;
         StateHasChanged();
         try

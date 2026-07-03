@@ -87,7 +87,7 @@
 
     async Task PickSuggestion(string s)
     {
-        text = ReplaceLastWord(text, s);
+        text = s.Contains(' ') ? s : ReplaceLastWord(text, s);
         showSuggestions = false;
         await OnSearch.InvokeAsync(text);
     }

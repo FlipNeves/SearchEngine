@@ -2,5 +2,12 @@ namespace SearchEngine.Ui.Options;
 
 public sealed class ApiOptions
 {
-    public string BaseUrl { get; set; } = "http://localhost:5050";
+    public List<EngineOption> Engines { get; set; } = [];
+}
+
+public sealed class EngineOption
+{
+    public string Key { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string BaseUrl { get; set; } = string.Empty;
 }

@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Options;
 using SearchEngine.Ui.Components;
 using SearchEngine.Ui.Options;
 using SearchEngine.Ui.Services;
@@ -10,11 +9,8 @@ builder.Services.Configure<ApiOptions>(builder.Configuration.GetSection("Api"));
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-builder.Services.AddHttpClient<ISearchApi, SearchApiClient>((sp, http) =>
-{
-    var opts = sp.GetRequiredService<IOptions<ApiOptions>>().Value;
-    http.BaseAddress = new Uri(opts.BaseUrl);
-});
+builder.Services.AddScoped<EngineSelection>();
+builder.Services.AddHttpClient<ISearchApi, SearchApiClient>();
 
 var app = builder.Build();
 
