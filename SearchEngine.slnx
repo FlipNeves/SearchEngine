@@ -14,4 +14,8 @@
     <Project Path="src/02-AtlasSearch/SearchEngine.AtlasSearch.Infrastructure/SearchEngine.AtlasSearch.Infrastructure.csproj" />
     <Project Path="src/02-AtlasSearch/SearchEngine.AtlasSearch.Api/SearchEngine.AtlasSearch.Api.csproj" />
   </Folder>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Shared/">
+    <Project Path="src/Shared/SearchEngine.Benchmark/SearchEngine.Benchmark.csproj" />
+  </Folder>
 </Solution>
