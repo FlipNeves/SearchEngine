@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using SearchEngine.FromScratch.Api.Options;
 using SearchEngine.FromScratch.Core.Indexing;
 using SearchEngine.FromScratch.Infrastructure.Daos;
+using SearchEngine.Shared.Domain.Interfaces;
 using SearchEngine.Shared.Text;
 
 namespace SearchEngine.FromScratch.Api.Services;
@@ -61,6 +62,7 @@ public sealed class VocabularyRefreshService : BackgroundService
 
         using var scope = _scopeFactory.CreateScope();
         var dao = scope.ServiceProvider.GetRequiredService<IInvertedIndexDao>();
+        var pages = scope.ServiceProvider.GetRequiredService<IPagesRepository>();
 
         var loaded = 0;
         await foreach (var doc in dao.StreamAllAsync(ct))
@@ -70,7 +72,13 @@ public sealed class VocabularyRefreshService : BackgroundService
             loaded++;
         }
 
-        _vocabulary.Replace(new VocabularySnapshot { Trie = trie, BkTree = bkTree });
-        _logger.LogInformation("Vocabulary refreshed: {Words} words in {Elapsed} ms", loaded, sw.ElapsedMilliseconds);
+        var titles = (await pages.ListTitlesAsync(ct))
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(TitleEntry.From)
+            .ToArray();
+
+        _vocabulary.Replace(new VocabularySnapshot { Trie = trie, BkTree = bkTree, Titles = titles });
+        _logger.LogInformation("Vocabulary refreshed: {Words} words and {Titles} titles in {Elapsed} ms", loaded, titles.Length, sw.ElapsedMilliseconds);
     }
 }

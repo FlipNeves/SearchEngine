@@ -3,19 +3,26 @@ using SearchEngine.Shared.Text;
 
 namespace SearchEngine.FromScratch.Api.Services;
 
-// Immutable view of the in-memory vocabulary built from one refresh: the prefix Trie
-// (autocomplete) and the BK-tree (fuzzy / spell-correction). Both always reflect the SAME
-// vocabulary snapshot, so a reader can never see a new Trie paired with a stale BK-tree.
+// Immutable view of the in-memory vocabulary built from one refresh: the prefix Trie,
+// the BK-tree (fuzzy / spell-correction) and the page titles (autocomplete). All reflect
+// the SAME snapshot, so a reader can never see a new Trie paired with a stale BK-tree.
 public sealed class VocabularySnapshot
 {
     public required Trie Trie { get; init; }
     public required BkTree BkTree { get; init; }
+    public required IReadOnlyList<TitleEntry> Titles { get; init; }
 
     public static VocabularySnapshot Empty { get; } = new()
     {
         Trie = new Trie(),
         BkTree = new BkTree(DamerauLevenshtein.Distance),
+        Titles = Array.Empty<TitleEntry>(),
     };
+}
+
+public sealed record TitleEntry(string Title, string Folded)
+{
+    public static TitleEntry From(string title) => new(title, TextFolding.Fold(title));
 }
 
 // Singleton holder. Replace swaps a single reference, so readers see either the whole old

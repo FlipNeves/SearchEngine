@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Options;
-using SearchEngine.FromScratch.Api.Options;
 using SearchEngine.FromScratch.Api.Services;
 using SearchEngine.Shared.Domain.Interfaces;
 using SearchEngine.Shared.Dtos;
@@ -8,9 +6,6 @@ namespace SearchEngine.FromScratch.Api.Endpoints;
 
 public static class SearchEndpoints
 {
-    private const int FuzzyTriggerThreshold = 3;
-    private const int FuzzyMinPrefixLength = 4;
-
     public static IEndpointRouteBuilder MapSearchEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGet("/search", SearchAsync)
@@ -24,7 +19,7 @@ public static class SearchEndpoints
         app.MapGet("/autocomplete", Autocomplete)
             .WithName("Autocomplete")
             .WithTags("Search")
-            .WithSummary("Sugere completions de prefixo (Trie) e, quando há poucas, correções fuzzy (BK-tree).")
+            .WithSummary("Search-as-you-type sobre os títulos das páginas. Sugere títulos de documentos, não palavras do vocabulário — `isCorrection` é sempre false neste motor.")
             .Produces<AutocompleteResponseDto>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
@@ -49,7 +44,6 @@ public static class SearchEndpoints
     private static IResult Autocomplete(
         string prefix,
         VocabularyIndex vocabulary,
-        IOptions<TrieRefreshOptions> options,
         int top = 10)
     {
         if (string.IsNullOrWhiteSpace(prefix))
@@ -58,42 +52,40 @@ public static class SearchEndpoints
         if (!vocabulary.IsReady)
             return Results.Problem("index is still loading, try again in a few seconds", statusCode: 503);
 
-        var suggestions = BuildSuggestions(
-            vocabulary.Current,
-            prefix.Trim().ToLowerInvariant(),
-            top,
-            options.Value.MaxSuggestionDistance);
+        var suggestions = BuildSuggestions(vocabulary.Current, prefix.Trim(), top);
 
         return Results.Ok(new AutocompleteResponseDto(prefix, suggestions));
     }
 
     private static IReadOnlyList<AutocompleteSuggestion> BuildSuggestions(
-        VocabularySnapshot snapshot, string prefix, int top, int maxDistance)
+        VocabularySnapshot snapshot, string prefix, int top)
     {
-        var result = new List<AutocompleteSuggestion>(top);
+        var folded = TextFolding.Fold(prefix);
+        if (folded.Length == 0) return Array.Empty<AutocompleteSuggestion>();
+
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return snapshot.Titles
+            .Select(t => (t.Title, Rank: MatchRank(t.Folded, folded)))
+            .Where(x => x.Rank >= 0)
+            .OrderBy(x => x.Rank)
+            .ThenBy(x => x.Title.Length)
+            .Where(x => seen.Add(x.Title))
+            .Take(top)
+            .Select(x => new AutocompleteSuggestion(x.Title, IsCorrection: false))
+            .ToArray();
+    }
 
-        foreach (var word in snapshot.Trie.Autocomplete(prefix).Take(top))
-            if (seen.Add(word))
-                result.Add(new AutocompleteSuggestion(word, IsCorrection: false));
+    private static int MatchRank(string foldedTitle, string foldedPrefix)
+    {
+        if (foldedTitle.StartsWith(foldedPrefix, StringComparison.Ordinal)) return 0;
 
-        var needsFuzzy = result.Count < FuzzyTriggerThreshold && prefix.Length >= FuzzyMinPrefixLength;
-        if (needsFuzzy)
+        var index = foldedTitle.IndexOf(foldedPrefix, StringComparison.Ordinal);
+        while (index > 0)
         {
-            var fuzzy = snapshot.BkTree.Search(prefix, maxDistance)
-                .Where(m => m.Distance > 0 && !seen.Contains(m.Word))
-                .OrderBy(m => m.Distance)
-                .ThenByDescending(m => snapshot.Trie.Frequency(m.Word))
-                .Select(m => m.Word);
-
-            foreach (var word in fuzzy)
-            {
-                if (result.Count >= top) break;
-                if (seen.Add(word))
-                    result.Add(new AutocompleteSuggestion(word, IsCorrection: true));
-            }
+            if (!char.IsLetterOrDigit(foldedTitle[index - 1])) return 1;
+            index = foldedTitle.IndexOf(foldedPrefix, index + 1, StringComparison.Ordinal);
         }
 
-        return result;
+        return -1;
     }
 }

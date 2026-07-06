@@ -37,6 +37,11 @@ public sealed class PagesRepository : IPagesRepository
         return dms.Select(ToDomain).ToArray();
     }
 
+    public async Task<IReadOnlyList<string>> ListTitlesAsync(CancellationToken ct = default)
+        => await _collection.Find(Builders<WebPageDataModel>.Filter.Empty)
+            .Project(d => d.Title)
+            .ToListAsync(ct);
+
     public async Task UpdateDerivedFieldsAsync(string id, int lengthTitle, int lengthContent, string language, CancellationToken ct = default)
     {
         if (!ObjectId.TryParse(id, out var oid)) return;
