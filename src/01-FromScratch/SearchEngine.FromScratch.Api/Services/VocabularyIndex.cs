@@ -1,5 +1,5 @@
 using SearchEngine.FromScratch.Core.Indexing;
-using SearchEngine.FromScratch.Core.Text;
+using SearchEngine.Shared.Text;
 
 namespace SearchEngine.FromScratch.Api.Services;
 

@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using MongoDB.Driver.Search;
@@ -78,7 +80,73 @@ public sealed class AtlasSearchEngine : ISearchEngine
             .Select(p => new SearchHit(p.Url, p.Title, BuildPreview(p), p.Score))
             .ToArray();
 
+        if (autoCorrect && results.Length > 0)
+        {
+            var corrected = TryCorrectFromHighlights(query, pages);
+            if (corrected is not null)
+                return new SearchResponseDto(corrected, results, new DidYouMean(query, corrected));
+        }
+
         return new SearchResponseDto(query, results, null);
+    }
+
+    private static string? TryCorrectFromHighlights(string query, IReadOnlyList<ScoredPage> pages)
+    {
+        var hitWordsByFold = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var page in pages)
+            foreach (var highlight in page.Highlights)
+                foreach (var text in highlight.Texts)
+                {
+                    if (text.Type != HighlightTextType.Hit) continue;
+                    foreach (var word in SplitWords(text.Value))
+                        hitWordsByFold.TryAdd(Fold(word), word.ToLowerInvariant());
+                }
+
+        if (hitWordsByFold.Count == 0) return null;
+
+        var words = query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        var anyCorrected = false;
+
+        for (var i = 0; i < words.Length; i++)
+        {
+            var folded = Fold(words[i]);
+            if (folded.Length < 2 || hitWordsByFold.ContainsKey(folded)) continue;
+
+            string? best = null;
+            var bestDistance = int.MaxValue;
+            foreach (var (candidateFold, candidate) in hitWordsByFold)
+            {
+                var distance = DamerauLevenshtein.Distance(folded, candidateFold);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    best = candidate;
+                }
+            }
+
+            if (best is not null && bestDistance <= 2 && bestDistance < folded.Length)
+            {
+                words[i] = best;
+                anyCorrected = true;
+            }
+        }
+
+        return anyCorrected ? string.Join(' ', words) : null;
+    }
+
+    private static IEnumerable<string> SplitWords(string text)
+        => text.Split(NonWordChars, StringSplitOptions.RemoveEmptyEntries);
+
+    private static readonly char[] NonWordChars =
+        Enumerable.Range(0, 128).Select(c => (char)c).Where(c => !char.IsLetterOrDigit(c)).ToArray();
+
+    private static string Fold(string text)
+    {
+        var sb = new StringBuilder(text.Length);
+        foreach (var ch in text.Normalize(NormalizationForm.FormD))
+            if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark)
+                sb.Append(char.ToLowerInvariant(ch));
+        return sb.ToString().Normalize(NormalizationForm.FormC);
     }
 
     private static string BuildPreview(ScoredPage page)

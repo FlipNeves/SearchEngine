@@ -12,7 +12,7 @@ public static class SearchEndpoints
             .WithName("Search")
             .WithTags("Search")
             .Produces<SearchResponseDto>()
-            .WithDescription("Busca via $search do Atlas (Lucene). Fuzzy matching embutido cobre erros de digitação — `didYouMean` é sempre null neste motor. Passe `correct=false` para desligar o fuzzy.");
+            .WithDescription("Busca via $search do Atlas (Lucene). Fuzzy matching embutido cobre erros de digitação e o motor sintetiza `didYouMean` comparando os termos da query com as palavras destacadas nos highlights. Passe `correct=false` para desligar o fuzzy e a correção.");
 
         app.MapGet("/autocomplete", AutocompleteAsync)
             .WithName("Autocomplete")

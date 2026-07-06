@@ -1,4 +1,4 @@
-namespace SearchEngine.FromScratch.Core.Text;
+namespace SearchEngine.Shared.Text;
 
 // True Damerau-Levenshtein distance: insertion, deletion, substitution and ADJACENT
 // transposition, each cost 1. Unlike the OSA (Optimal String Alignment) variant, this

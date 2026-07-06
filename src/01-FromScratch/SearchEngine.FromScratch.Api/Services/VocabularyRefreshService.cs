@@ -2,8 +2,8 @@ using System.Diagnostics;
 using Microsoft.Extensions.Options;
 using SearchEngine.FromScratch.Api.Options;
 using SearchEngine.FromScratch.Core.Indexing;
-using SearchEngine.FromScratch.Core.Text;
 using SearchEngine.FromScratch.Infrastructure.Daos;
+using SearchEngine.Shared.Text;
 
 namespace SearchEngine.FromScratch.Api.Services;
 
