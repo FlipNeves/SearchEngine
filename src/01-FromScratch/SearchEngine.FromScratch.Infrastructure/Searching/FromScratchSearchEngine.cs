@@ -104,7 +104,8 @@ public sealed class FromScratchSearchEngine : ISearchEngine
             Accumulate(phraseEntries.Select(e => e.Postings), boost: _options.PhraseBoost);
         }
 
-        ApplyProximity(termEntries);
+        var termListsByDoc = BuildTermLists(termEntries);
+        ApplyProximity();
 
         var ranked = scoreByDoc
             .OrderByDescending(kv => kv.Value)
@@ -120,7 +121,8 @@ public sealed class FromScratchSearchEngine : ISearchEngine
             .Select(kv =>
             {
                 var p = pageById[kv.Key.ToString()];
-                return new SearchHit(p.Url, p.Title, Truncate(p.Content, 200), kv.Value);
+                termListsByDoc.TryGetValue(kv.Key, out var lists);
+                return new SearchHit(p.Url, p.Title, BuildPreview(p.Content, lists), kv.Value);
             })
             .ToArray();
 
@@ -150,41 +152,46 @@ public sealed class FromScratchSearchEngine : ISearchEngine
                 ? _options.LanguageBoost
                 : 1.0;
 
-        void ApplyProximity(IReadOnlyList<InvertedIndexDataModel> entries)
+        void ApplyProximity()
         {
-            if (_options.ProximityBoost <= 0 || entries.Count < 2) return;
-
-            var termListsByDoc = new Dictionary<ObjectId, List<int[]>>();
-            foreach (var entry in entries)
-            {
-                foreach (var posting in entry.Postings)
-                {
-                    if (posting.PositionsContent.Count == 0) continue;
-
-                    var starts = new int[posting.PositionsContent.Count];
-                    for (var i = 0; i < starts.Length; i++)
-                        starts[i] = posting.PositionsContent[i].Start;
-
-                    if (!termListsByDoc.TryGetValue(posting.DocId, out var lists))
-                        termListsByDoc[posting.DocId] = lists = new List<int[]>();
-                    lists.Add(starts);
-                }
-            }
+            if (_options.ProximityBoost <= 0) return;
 
             foreach (var (docId, lists) in termListsByDoc)
             {
                 if (lists.Count < 2 || !scoreByDoc.ContainsKey(docId)) continue;
 
-                var span = MinWindowSpan(lists);
-                if (span < 0) continue;
+                var window = BestWindow(lists);
+                if (window is null) continue;
 
+                var span = window.Value.To - window.Value.From;
                 var factor = 1.0 + _options.ProximityBoost * (_options.ProximityScale / (_options.ProximityScale + span));
                 scoreByDoc[docId] *= factor;
             }
         }
     }
 
-    private static int MinWindowSpan(List<int[]> sortedLists)
+    private static Dictionary<ObjectId, List<int[]>> BuildTermLists(IReadOnlyList<InvertedIndexDataModel> entries)
+    {
+        var termListsByDoc = new Dictionary<ObjectId, List<int[]>>();
+        foreach (var entry in entries)
+        {
+            foreach (var posting in entry.Postings)
+            {
+                if (posting.PositionsContent.Count == 0) continue;
+
+                var starts = new int[posting.PositionsContent.Count];
+                for (var i = 0; i < starts.Length; i++)
+                    starts[i] = posting.PositionsContent[i].Start;
+
+                if (!termListsByDoc.TryGetValue(posting.DocId, out var lists))
+                    termListsByDoc[posting.DocId] = lists = new List<int[]>();
+                lists.Add(starts);
+            }
+        }
+        return termListsByDoc;
+    }
+
+    private static (int From, int To)? BestWindow(List<int[]> sortedLists)
     {
         var k = sortedLists.Count;
         var pointers = new int[k];
@@ -192,11 +199,13 @@ public sealed class FromScratchSearchEngine : ISearchEngine
 
         foreach (var list in sortedLists)
         {
-            if (list.Length == 0) return -1;
+            if (list.Length == 0) return null;
             if (list[0] > currentMax) currentMax = list[0];
         }
 
         var best = int.MaxValue;
+        var bestFrom = 0;
+        var bestTo = 0;
         while (true)
         {
             var minList = 0;
@@ -212,7 +221,12 @@ public sealed class FromScratchSearchEngine : ISearchEngine
             }
 
             var window = currentMax - minVal;
-            if (window < best) best = window;
+            if (window < best)
+            {
+                best = window;
+                bestFrom = minVal;
+                bestTo = currentMax;
+            }
             if (best == 0) break;
 
             pointers[minList]++;
@@ -222,7 +236,7 @@ public sealed class FromScratchSearchEngine : ISearchEngine
             if (advanced > currentMax) currentMax = advanced;
         }
 
-        return best;
+        return (bestFrom, bestTo);
     }
 
     private Token[]? TryCorrectTokens(Token[] tokens, IReadOnlyCollection<string> missingTerms)
@@ -252,6 +266,31 @@ public sealed class FromScratchSearchEngine : ISearchEngine
 
     private static SearchResponseDto Empty(string query)
         => new(query, Array.Empty<SearchHit>(), null);
+
+    private static string BuildPreview(string content, List<int[]>? termLists)
+    {
+        if (string.IsNullOrEmpty(content)) return string.Empty;
+
+        var window = termLists is { Count: > 0 } ? BestWindow(termLists) : null;
+        if (window is null) return Truncate(CollapseWhitespace(content), 200);
+
+        var from = Math.Max(0, window.Value.From - 60);
+        var to = Math.Min(content.Length, window.Value.To + 140);
+        if (from >= to) return Truncate(CollapseWhitespace(content), 200);
+
+        var slice = CollapseWhitespace(content[from..to]);
+        var suffix = to < content.Length ? "…" : string.Empty;
+        if (slice.Length > 300)
+        {
+            slice = slice[..300];
+            suffix = "…";
+        }
+
+        return (from > 0 ? "…" : string.Empty) + slice + suffix;
+    }
+
+    private static string CollapseWhitespace(string text)
+        => string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     private static string Truncate(string text, int max)
         => string.IsNullOrEmpty(text) || text.Length <= max ? text : text[..max] + "…";
