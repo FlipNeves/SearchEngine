@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.Text;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using MongoDB.Driver.Search;
@@ -34,9 +32,17 @@ public sealed class AtlasSearchEngine : ISearchEngine
 
         var clauses = new List<SearchDefinition<WebPageDataModel>>
         {
-            search.Text(x => x.Title, query, fuzzy: fuzzy, score: score.Boost(_options.WTitle)),
-            search.Text(x => x.Content, query, fuzzy: fuzzy)
+            search.Text(x => x.Title, query, score: score.Boost(_options.WTitle)),
+            search.Text(x => x.Content, query)
         };
+
+        if (fuzzy is not null)
+        {
+            clauses.Add(search.Text(x => x.Title, query, fuzzy: fuzzy,
+                score: score.Boost(_options.WTitle * _options.FuzzyFallbackBoost)));
+            clauses.Add(search.Text(x => x.Content, query, fuzzy: fuzzy,
+                score: score.Boost(_options.FuzzyFallbackBoost)));
+        }
 
         if (_options.PhraseBoost > 0)
         {
@@ -98,8 +104,8 @@ public sealed class AtlasSearchEngine : ISearchEngine
                 foreach (var text in highlight.Texts)
                 {
                     if (text.Type != HighlightTextType.Hit) continue;
-                    foreach (var word in SplitWords(text.Value))
-                        hitWordsByFold.TryAdd(Fold(word), word.ToLowerInvariant());
+                    foreach (var word in TextFolding.SplitWords(text.Value))
+                        hitWordsByFold.TryAdd(TextFolding.Fold(word), word.ToLowerInvariant());
                 }
 
         if (hitWordsByFold.Count == 0) return null;
@@ -109,7 +115,7 @@ public sealed class AtlasSearchEngine : ISearchEngine
 
         for (var i = 0; i < words.Length; i++)
         {
-            var folded = Fold(words[i]);
+            var folded = TextFolding.Fold(words[i]);
             if (folded.Length < 2 || hitWordsByFold.ContainsKey(folded)) continue;
 
             string? best = null;
@@ -132,21 +138,6 @@ public sealed class AtlasSearchEngine : ISearchEngine
         }
 
         return anyCorrected ? string.Join(' ', words) : null;
-    }
-
-    private static IEnumerable<string> SplitWords(string text)
-        => text.Split(NonWordChars, StringSplitOptions.RemoveEmptyEntries);
-
-    private static readonly char[] NonWordChars =
-        Enumerable.Range(0, 128).Select(c => (char)c).Where(c => !char.IsLetterOrDigit(c)).ToArray();
-
-    private static string Fold(string text)
-    {
-        var sb = new StringBuilder(text.Length);
-        foreach (var ch in text.Normalize(NormalizationForm.FormD))
-            if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark)
-                sb.Append(char.ToLowerInvariant(ch));
-        return sb.ToString().Normalize(NormalizationForm.FormC);
     }
 
     private static string BuildPreview(ScoredPage page)
