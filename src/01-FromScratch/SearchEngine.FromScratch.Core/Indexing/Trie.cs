@@ -51,6 +51,63 @@ public sealed class Trie
         lock (_gate) { return _frequencies.TryGetValue(normalized, out var freq) ? freq : 0; }
     }
 
+    public IReadOnlyList<(string Word, int Distance)> FuzzyAutocomplete(string prefix, int maxEdits)
+    {
+        if (string.IsNullOrEmpty(prefix)) return Array.Empty<(string, int)>();
+        var normalized = prefix.Trim().ToLowerInvariant();
+        if (normalized.Length == 0) return Array.Empty<(string, int)>();
+
+        lock (_gate)
+        {
+            var best = new Dictionary<string, int>(StringComparer.Ordinal);
+            var initialRow = new int[normalized.Length + 1];
+            for (var j = 0; j <= normalized.Length; j++) initialRow[j] = j;
+
+            foreach (var (ch, child) in _root.Children)
+            {
+                if (ch != normalized[0]) continue;
+                Walk(child, ch, initialRow, null, '\0', normalized, maxEdits, best);
+            }
+
+            return best
+                .OrderBy(kv => kv.Value)
+                .ThenByDescending(kv => _frequencies.GetValueOrDefault(kv.Key))
+                .ThenBy(kv => kv.Key.Length)
+                .Select(kv => (kv.Key, kv.Value))
+                .ToArray();
+        }
+    }
+
+    private static void Walk(
+        TrieNode node, char ch, int[] prevRow, int[]? prevPrevRow, char prevCh,
+        string prefix, int maxEdits, Dictionary<string, int> best)
+    {
+        var m = prefix.Length;
+        var row = new int[m + 1];
+        row[0] = prevRow[0] + 1;
+        var min = row[0];
+
+        for (var j = 1; j <= m; j++)
+        {
+            var cost = prefix[j - 1] == ch ? 0 : 1;
+            var value = Math.Min(Math.Min(row[j - 1] + 1, prevRow[j] + 1), prevRow[j - 1] + cost);
+            if (j > 1 && prevPrevRow is not null && prefix[j - 1] == prevCh && prefix[j - 2] == ch)
+                value = Math.Min(value, prevPrevRow[j - 2] + 1);
+            row[j] = value;
+            if (value < min) min = value;
+        }
+
+        if (row[m] <= maxEdits)
+            foreach (var word in node.TopSuggestions)
+                if (!best.TryGetValue(word, out var existing) || row[m] < existing)
+                    best[word] = row[m];
+
+        if (min > maxEdits) return;
+
+        foreach (var (nextCh, child) in node.Children)
+            Walk(child, nextCh, row, prevRow, ch, prefix, maxEdits, best);
+    }
+
     public IReadOnlyList<string> Autocomplete(string prefix)
     {
         if (string.IsNullOrEmpty(prefix)) return Array.Empty<string>();

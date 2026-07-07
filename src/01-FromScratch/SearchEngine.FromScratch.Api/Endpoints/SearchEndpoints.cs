@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using SearchEngine.FromScratch.Api.Options;
 using SearchEngine.FromScratch.Api.Services;
 using SearchEngine.Shared.Domain.Interfaces;
 using SearchEngine.Shared.Dtos;
@@ -19,7 +21,7 @@ public static class SearchEndpoints
         app.MapGet("/autocomplete", Autocomplete)
             .WithName("Autocomplete")
             .WithTags("Search")
-            .WithSummary("Search-as-you-type sobre os títulos das páginas. Sugere títulos de documentos, não palavras do vocabulário — `isCorrection` é sempre false neste motor.")
+            .WithSummary("Search-as-you-type híbrido: palavras do vocabulário (com tolerância a typo via caminhada fuzzy na Trie) seguidas de títulos de páginas. `isCorrection` marca palavras cujo prefixo digitado precisou de correção.")
             .Produces<AutocompleteResponseDto>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
@@ -44,6 +46,7 @@ public static class SearchEndpoints
     private static IResult Autocomplete(
         string prefix,
         VocabularyIndex vocabulary,
+        IOptions<TrieRefreshOptions> options,
         int top = 10)
     {
         if (string.IsNullOrWhiteSpace(prefix))
@@ -52,28 +55,61 @@ public static class SearchEndpoints
         if (!vocabulary.IsReady)
             return Results.Problem("index is still loading, try again in a few seconds", statusCode: 503);
 
-        var suggestions = BuildSuggestions(vocabulary.Current, prefix.Trim(), top);
+        var suggestions = BuildSuggestions(
+            vocabulary.Current, prefix.Trim(), top, options.Value.MaxSuggestionDistance);
 
         return Results.Ok(new AutocompleteResponseDto(prefix, suggestions));
     }
 
+    private const int WordSuggestionLimit = 5;
+
     private static IReadOnlyList<AutocompleteSuggestion> BuildSuggestions(
-        VocabularySnapshot snapshot, string prefix, int top)
+        VocabularySnapshot snapshot, string prefix, int top, int maxSuggestionDistance)
     {
         var folded = TextFolding.Fold(prefix);
         if (folded.Length == 0) return Array.Empty<AutocompleteSuggestion>();
 
+        var maxEdits = folded.Length switch
+        {
+            < 3 => 0,
+            < 5 => Math.Min(1, maxSuggestionDistance),
+            _ => maxSuggestionDistance
+        };
+
+        var words = snapshot.Trie.FuzzyAutocomplete(folded, maxEdits);
+
+        var suggestions = new List<AutocompleteSuggestion>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        return snapshot.Titles
-            .Select(t => (t.Title, Rank: MatchRank(t.Folded, folded)))
+
+        foreach (var (word, distance) in words)
+        {
+            if (suggestions.Count >= WordSuggestionLimit) break;
+            if (seen.Add(word))
+                suggestions.Add(new AutocompleteSuggestion(word, IsCorrection: distance > 0));
+        }
+
+        var titles = MatchTitles(snapshot.Titles, folded);
+        if (titles.Count == 0 && words.Count > 0)
+            titles = MatchTitles(snapshot.Titles, words[0].Word);
+
+        foreach (var title in titles)
+        {
+            if (suggestions.Count >= top) break;
+            if (seen.Add(title))
+                suggestions.Add(new AutocompleteSuggestion(title, IsCorrection: false));
+        }
+
+        return suggestions;
+    }
+
+    private static IReadOnlyList<string> MatchTitles(IReadOnlyList<TitleEntry> titles, string foldedPrefix)
+        => titles
+            .Select(t => (t.Title, Rank: MatchRank(t.Folded, foldedPrefix)))
             .Where(x => x.Rank >= 0)
             .OrderBy(x => x.Rank)
             .ThenBy(x => x.Title.Length)
-            .Where(x => seen.Add(x.Title))
-            .Take(top)
-            .Select(x => new AutocompleteSuggestion(x.Title, IsCorrection: false))
+            .Select(x => x.Title)
             .ToArray();
-    }
 
     private static int MatchRank(string foldedTitle, string foldedPrefix)
     {
