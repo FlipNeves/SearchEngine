@@ -18,7 +18,7 @@ public static class SearchEndpoints
             .WithName("Autocomplete")
             .WithTags("Search")
             .Produces<AutocompleteResponseDto>()
-            .WithDescription("Search-as-you-type via operador `autocomplete` do Atlas sobre o título das páginas. Sugere títulos de documentos, não palavras do vocabulário — `isCorrection` é sempre false neste motor.");
+            .WithDescription("Search-as-you-type híbrido via operador `autocomplete` do Atlas (com fuzzy) sobre o título das páginas: palavras sintetizadas dos títulos casados seguidas dos próprios títulos. `isCorrection` marca palavras cujo prefixo digitado precisou de correção.");
     }
 
     private static async Task<IResult> SearchAsync(
