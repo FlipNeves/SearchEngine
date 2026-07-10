@@ -77,18 +77,19 @@ public sealed class FromScratchIndexer : IPageIndexer
         var termOps = byTerm.Select(kv => (kv.Key, kv.Value)).ToArray();
         var phraseOps = phraseByKey.Select(kv => (kv.Key.Phrase, kv.Key.Size, kv.Value)).ToArray();
 
+        if (termOps.Length == 0 && phraseOps.Length == 0)
+            return;
+
+        var language = _language.Detect($"{page.Title} {page.Content}").Language;
+        await _pages.UpdateDerivedFieldsAsync(page.Id, titleTokens.Length, contentTokens.Length, language, ct);
+
         if (termOps.Length > 0)
             await _index.UpsertPostingsAsync(termOps, ct);
 
         if (phraseOps.Length > 0)
             await _phrase.UpsertPostingsAsync(phraseOps, ct);
 
-        if (termOps.Length > 0 || phraseOps.Length > 0)
-        {
-            var language = _language.Detect($"{page.Title} {page.Content}").Language;
-            await _pages.UpdateDerivedFieldsAsync(page.Id, titleTokens.Length, contentTokens.Length, language, ct);
-            await _stats.RecomputeAsync(ct);
-        }
+        await _stats.RecomputeAsync(ct);
     }
 
     private static PostingDataModel GetOrCreate(Dictionary<string, PostingDataModel> byTerm, string term, ObjectId docId)
