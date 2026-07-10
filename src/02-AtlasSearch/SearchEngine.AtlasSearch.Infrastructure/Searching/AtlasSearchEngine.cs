@@ -115,7 +115,7 @@ public sealed class AtlasSearchEngine : ISearchEngine
 
         for (var i = 0; i < words.Length; i++)
         {
-            var folded = TextFolding.Fold(words[i]);
+            var folded = TextFolding.Fold(string.Concat(TextFolding.SplitWords(words[i])));
             if (folded.Length < 2 || hitWordsByFold.ContainsKey(folded)) continue;
 
             string? best = null;
